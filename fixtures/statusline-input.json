@@ -1,0 +1,10 @@
+{
+  "session_id": "00000000-0000-0000-0000-000000000000",
+  "model": { "id": "claude-fable-5", "display_name": "Fable 5" },
+  "version": "2.1.199",
+  "context_window": { "used_percentage": 14 },
+  "rate_limits": {
+    "five_hour": { "used_percentage": 27, "resets_at": 1783115400 },
+    "seven_day": { "used_percentage": 5, "resets_at": 1783440000 }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "limits": [
+    { "kind": "session", "group": "session", "percent": 23, "severity": "normal",
+      "resets_at": "2026-07-03T14:49:59.866746+00:00", "scope": null, "is_active": false },
+    { "kind": "weekly_all", "group": "weekly", "percent": 44, "severity": "normal",
+      "resets_at": "2026-07-04T12:59:59.866771+00:00", "scope": null, "is_active": false },
+    { "kind": "weekly_scoped", "group": "weekly", "percent": 75, "severity": "warning",
+      "resets_at": "2026-07-04T12:59:59.867071+00:00",
+      "scope": { "model": { "id": null, "display_name": "Fable" }, "surface": null }, "is_active": true }
+  ]
+}
