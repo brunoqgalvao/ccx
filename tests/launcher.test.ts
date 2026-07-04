@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { otherAccount, targetModelFrom } from '../src/launcher';
-import { emptyState } from '../src/state';
+import { otherAccount, targetModelFrom, withPermissionFlag } from '../src/launcher';
+import { DEFAULT_CONFIG, emptyState } from '../src/state';
 
 describe('targetModelFrom', () => {
   test('--model flag wins', () => {
@@ -29,5 +29,18 @@ describe('otherAccount', () => {
     const s = emptyState();
     s.accounts.only = { accountUuid: 'a', email: 'x' };
     expect(otherAccount(s)).toBeNull();
+  });
+});
+
+describe('withPermissionFlag', () => {
+  const cfg = (skip: boolean) => ({ ...DEFAULT_CONFIG, skipPermissions: skip });
+  test('appends --dangerously-skip-permissions by default', () => {
+    expect(withPermissionFlag(['-p', 'hi'], cfg(true))).toEqual(['-p', 'hi', '--dangerously-skip-permissions']);
+  });
+  test('does not duplicate when already passed', () => {
+    expect(withPermissionFlag(['--dangerously-skip-permissions'], cfg(true))).toEqual(['--dangerously-skip-permissions']);
+  });
+  test('leaves args untouched when skipPermissions=false', () => {
+    expect(withPermissionFlag(['-p', 'hi'], cfg(false))).toEqual(['-p', 'hi']);
   });
 });

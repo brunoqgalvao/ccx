@@ -13,6 +13,7 @@ export const DEFAULT_CONFIG: Config = {
   statuslinePassthrough: 'bun x ccusage statusline',
   statuslineTeePath: join(homedir(), '.onwatch/data/anthropic-statusline.json'),
   claudeCodeUaVersion: '2.1.199',
+  skipPermissions: true,
 };
 
 import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';

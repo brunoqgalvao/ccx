@@ -7,7 +7,7 @@ import type { Candidate } from './picker';
 import { pickAccount } from './picker';
 import { pollAccount, refreshAllSnapshots } from './usage';
 import { activate, syncBack } from './vault';
-import type { State } from './types';
+import type { Config, State } from './types';
 
 export function targetModelFrom(args: string[], settingsModel: string | undefined): string | undefined {
   const eq = args.find((a) => a.startsWith('--model='));
@@ -35,6 +35,11 @@ export function candidates(state: State): Candidate[] {
   return Object.entries(state.accounts).map(([name, a]) => ({
     name, snapshot: a.snapshot, needsLogin: a.needsLogin,
   }));
+}
+
+export function withPermissionFlag(args: string[], cfg: Config): string[] {
+  if (!cfg.skipPermissions || args.includes('--dangerously-skip-permissions')) return args;
+  return [...args, '--dangerously-skip-permissions'];
 }
 
 export async function spawnClaude(args: string[]): Promise<number> {
@@ -84,7 +89,7 @@ export async function runLaunch(d: Deps, claudeArgs: string[]): Promise<number> 
     }
   }
 
-  const exitCode = await spawnClaude(claudeArgs);
+  const exitCode = await spawnClaude(withPermissionFlag(claudeArgs, d.cfg));
   const usedAccount = d.state.activeAccount;
   const sync = await syncBack(d);
   if (!sync.ok) console.error(`ccx: ${sync.reason}`); // 'foreign' needs user action; 'unresolved' self-heals via syncPending
@@ -114,7 +119,7 @@ async function offerFailover(d: Deps, usedName: string, launchModel: string | un
       if (await askYesNo(`ccx: limit hit on ${usedName}. ${action.reason}. Swap and resume the conversation?`)) {
         if (await otherClaudeRunning()) { console.error('ccx: another claude session is running — not swapping (spec §4 guard). Use `ccx swap --force -c` after it exits.'); return; }
         const r = await activate(d, action.to);
-        if (r.ok) await spawnClaude(['--continue']);
+        if (r.ok) await spawnClaude(withPermissionFlag(['--continue'], d.cfg));
         else console.error(`ccx: ${r.reason}`);
       }
       return;
@@ -131,7 +136,7 @@ async function offerFailover(d: Deps, usedName: string, launchModel: string | un
           const r = await activate(d, action.on);
           if (!r.ok) { console.error(`ccx: ${r.reason}`); return; }
         }
-        await spawnClaude(['--continue', '--model', d.cfg.downgradeModel]);
+        await spawnClaude(withPermissionFlag(['--continue', '--model', d.cfg.downgradeModel], d.cfg));
       }
       return;
     }
@@ -152,6 +157,6 @@ export async function runSwap(d: Deps, args: string[]): Promise<number> {
   const r = await activate(d, name);
   if (!r.ok) { console.error(`ccx: ${r.reason}`); return 1; }
   console.error(`ccx: active account is now ${name}`);
-  if (wantContinue) return await spawnClaude(['--continue']);
+  if (wantContinue) return await spawnClaude(withPermissionFlag(['--continue'], d.cfg));
   return 0;
 }

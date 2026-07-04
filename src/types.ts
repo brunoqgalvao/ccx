@@ -50,4 +50,5 @@ export interface Config {
   statuslinePassthrough: string;   // "bun x ccusage statusline"
   statuslineTeePath: string;       // onwatch bridge file
   claudeCodeUaVersion: string;     // "2.1.199"
+  skipPermissions: boolean;        // true — append --dangerously-skip-permissions to every claude spawn
 }

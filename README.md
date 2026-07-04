@@ -64,7 +64,8 @@ separate "account names" config entry.
 | `ccx doctor` | Self-checks: Keychain round-trip, live-slot readability, per-account vault + profile/usage endpoint reachability, blob-size headroom, `claude` on `PATH`, and whether the statusline is wired to `ccx statusline`. |
 
 Optional alias migration (replaces the current bare-`claude` alias):
-`alias cc="ccx --dangerously-skip-permissions"`.
+`alias cc="ccx"` — `--dangerously-skip-permissions` is already applied by
+default (see `skipPermissions` below to opt out).
 
 ## Configuration
 
@@ -83,6 +84,7 @@ from `src/state.ts`'s `DEFAULT_CONFIG`):
 | `statuslinePassthrough` | `"bun x ccusage statusline"` | Command `ccx statusline` pipes the raw stdin JSON through and renders first, before appending ccx's segment. |
 | `statuslineTeePath` | `~/.onwatch/data/anthropic-statusline.json` | Where the raw statusline JSON is teed for onwatch's bridge (preserves the existing onwatch integration). |
 | `claudeCodeUaVersion` | `"2.1.199"` | `User-Agent` version string sent to the usage/profile endpoints (they're unofficial and version-sensitive). |
+| `skipPermissions` | `true` | Appends `--dangerously-skip-permissions` to every `claude` spawn (launch, failover resume, `swap -c`). Set `false` to keep Claude Code's permission prompts. |
 
 `~/.ccx/state.json` is ccx's own runtime state (active account, per-account
 snapshots, `sync_pending`, notifier throttle history) — no secrets, mode
