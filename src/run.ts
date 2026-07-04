@@ -4,7 +4,7 @@ import { vaultService } from './keychain';
 import { withPermissionFlag } from './launcher';
 import { refreshParked } from './vault';
 
-export type RunPrep = { ok: true; token: string; warnings: string[] } | { ok: false; reason: string };
+export type RunPrep = { ok: true; token: string; expiresAt: number; warnings: string[] } | { ok: false; reason: string };
 
 function ttlMs(d: Deps): number {
   return d.cfg.runMinTokenTtlMin * 60_000;
@@ -45,7 +45,7 @@ export async function prepareRun(d: Deps, name: string): Promise<RunPrep> {
   if (profile.uuid !== account.accountUuid) {
     return { ok: false, reason: `vault entry for "${name}" belongs to a different account (${profile.email || profile.uuid}) — re-run \`ccx import ${name} --force\`` };
   }
-  return { ok: true, token: tokens.accessToken, warnings };
+  return { ok: true, token: tokens.accessToken, expiresAt: tokens.expiresAt, warnings };
 }
 
 export async function spawnClaudePinned(args: string[], token: string): Promise<number> {
@@ -56,14 +56,36 @@ export async function spawnClaudePinned(args: string[], token: string): Promise<
   return await p.exited;
 }
 
-export async function runRun(d: Deps, argv: string[], spawn = spawnClaudePinned): Promise<number> {
+/** A pinned session cannot rotate its env token; if it exited AFTER the token's expiry,
+ *  the likely cause is auth death — refresh and resume rather than losing the session. */
+export function shouldResume(exitedAt: Date, tokenExpiresAt: number, args: string[], isTTY: boolean): boolean {
+  if (!isTTY) return false;
+  if (args.includes('-p') || args.includes('--print')) return false; // one-shots end when they end
+  return exitedAt.getTime() >= tokenExpiresAt;
+}
+
+export async function runRun(
+  d: Deps,
+  argv: string[],
+  spawn = spawnClaudePinned,
+  isTTY: () => boolean = () => process.stdin.isTTY === true,
+): Promise<number> {
   const name = argv[0];
   if (!name || name.startsWith('-')) { console.error('usage: ccx run <account> [claude args...]'); return 1; }
-  const prep = await prepareRun(d, name);
-  if (!prep.ok) { console.error(`ccx: ${prep.reason}`); return 1; }
-  for (const w of prep.warnings) console.error(`ccx: ${w}`);
-  console.error(`ccx: pinned session on ${name} (${d.state.accounts[name].email}) — live Keychain slot untouched`);
-  return spawn(withPermissionFlag(argv.slice(1), d.cfg), prep.token);
+  let args = argv.slice(1);
+  let resumed = false;
+  while (true) {
+    const prep = await prepareRun(d, name);
+    if (!prep.ok) { console.error(`ccx: ${prep.reason}`); return 1; }
+    for (const w of prep.warnings) console.error(`ccx: ${w}`);
+    console.error(resumed
+      ? `ccx: token refreshed — resuming pinned session on ${name}`
+      : `ccx: pinned session on ${name} (${d.state.accounts[name].email}) — live Keychain slot untouched`);
+    const code = await spawn(withPermissionFlag(args, d.cfg), prep.token);
+    if (!shouldResume(d.now(), prep.expiresAt, args, isTTY())) return code;
+    args = ['--continue'];
+    resumed = true;
+  }
 }
 
 export async function runRefresh(d: Deps): Promise<number> {

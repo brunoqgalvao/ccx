@@ -108,11 +108,22 @@ another — "swapping" one of them is just exiting it and relaunching with
 `ccx run <other> -- --continue`; the other terminal never notices, and the
 concurrency guard doesn't apply.
 
-The one limit: a running pinned session cannot rotate its own token, so it dies
-when the access token expires (~8–12h from issuance). `ccx run` refreshes at
-launch so you start with a full window; to keep parked tokens warm around the
-clock, add a launchd timer for `ccx refresh`
-(`~/Library/LaunchAgents/dev.ccx.refresh.plist`):
+A running pinned session cannot rotate its own env token, so `ccx run` covers
+the expiry wall from both sides:
+
+- **Refresh at launch** — the vault token is refreshed when it has less than
+  `runMinTokenTtlMin` left, so every session starts with a full window.
+- **Auto-resume on auth death** — if an interactive pinned session exits
+  *after* its token's expiry time (the signature of dying to an expired
+  token), ccx refreshes the token and relaunches with `--continue`
+  automatically; the conversation carries on. One-shot `-p`/`--print` runs
+  and non-TTY contexts are never auto-resumed, and an exit while the token
+  is still valid is treated as intentional.
+
+To also keep parked tokens warm around the clock, add a launchd timer for
+`ccx refresh` (`~/Library/LaunchAgents/dev.ccx.refresh.plist`). Note the
+explicit `PATH`: launchd doesn't read your shell profile, and the `ccx`
+launcher needs `bun` on `PATH` for its shebang:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -120,9 +131,14 @@ clock, add a launchd timer for `ccx refresh`
 <plist version="1.0"><dict>
   <key>Label</key><string>dev.ccx.refresh</string>
   <key>ProgramArguments</key><array>
-    <string>/bin/zsh</string><string>-lc</string><string>ccx refresh</string>
+    <string>/Users/YOU/.bun/bin/ccx</string><string>refresh</string>
   </array>
+  <key>EnvironmentVariables</key><dict>
+    <key>PATH</key><string>/Users/YOU/.bun/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
   <key>StartInterval</key><integer>14400</integer>
+  <key>StandardOutPath</key><string>/tmp/ccx-refresh.log</string>
+  <key>StandardErrorPath</key><string>/tmp/ccx-refresh.log</string>
 </dict></plist>
 ```
 

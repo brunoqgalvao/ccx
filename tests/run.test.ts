@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { prepareRun, runRefresh, runRun } from '../src/run';
+import { prepareRun, runRefresh, runRun, shouldResume } from '../src/run';
 import { vaultService, LIVE_SERVICE } from '../src/keychain';
 import { blob, fakeApi, fakeDeps, fakeKeychain } from './fakes';
 
@@ -113,5 +113,45 @@ describe('runRefresh', () => {
     expect(api.calls).toContain('refresh:rt-bqg');            // expired + parked → refreshed
     expect(api.calls).not.toContain('refresh:rt-pqg');        // fresh → skipped
     expect(api.calls).not.toContain('refresh:rt-mei');        // live → Claude Code's job
+  });
+});
+
+describe('shouldResume', () => {
+  const t0 = NOW;
+  test('resumes when the session outlived its token (interactive)', () => {
+    expect(shouldResume(new Date(t0), t0 - 1, ['some-arg'], true)).toBe(true);
+  });
+  test('does not resume while the token is still valid (user exited on purpose)', () => {
+    expect(shouldResume(new Date(t0), t0 + 3600_000, [], true)).toBe(false);
+  });
+  test('never resumes print-mode one-shots', () => {
+    expect(shouldResume(new Date(t0), t0 - 1, ['-p', 'hi'], true)).toBe(false);
+    expect(shouldResume(new Date(t0), t0 - 1, ['--print'], true)).toBe(false);
+  });
+  test('never resumes without a TTY', () => {
+    expect(shouldResume(new Date(t0), t0 - 1, [], false)).toBe(false);
+  });
+});
+
+describe('runRun auto-resume', () => {
+  test('relaunches with --continue on a fresh token after an auth-death exit', async () => {
+    let clock = NOW;
+    const kc = fakeKeychain({ [vaultService('bqg')]: blob('at-1', 'rt-1', NOW + 7 * 3600_000) });
+    const api = fakeApi({
+      refresh: (rt) => ({ ok: true, tokens: { accessToken: 'at-2', refreshToken: 'rt-2', expiresAt: clock + 8 * 3600_000 } }),
+      profile: (t) => ({ ok: true, uuid: 'uuid-bqg', email: 'bqg@x.com' }),
+    });
+    const d = depsWith({ kc, api, now: () => new Date(clock) });
+    const spawned: { args: string[]; token: string }[] = [];
+    const code = await runRun(d, ['bqg'], async (args, token) => {
+      spawned.push({ args, token });
+      if (spawned.length === 1) { clock += 8 * 3600_000; return 1; } // session outlives token → auth death
+      return 0; // resumed session exits normally while token still valid
+    }, () => true);
+    expect(code).toBe(0);
+    expect(spawned.length).toBe(2);
+    expect(spawned[0].token).toBe('at-1');
+    expect(spawned[1].token).toBe('at-2');                       // resumed on the REFRESHED token
+    expect(spawned[1].args).toContain('--continue');
   });
 });
