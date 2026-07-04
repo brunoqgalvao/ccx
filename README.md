@@ -57,6 +57,8 @@ separate "account names" config entry.
 |---|---|
 | `ccx [claude args...]` | Default command. Picks the best account (by effective headroom for the target model), activates it if different from the current live slot, launches `claude` with any passthrough args, and on exit runs sync-back + failover assessment. |
 | `ccx status [--json]` | Refreshes both accounts' snapshots and prints gauges, severities, reset times, and the active marker. |
+| `ccx run <account> [claude args...]` | **Pinned session.** Launches `claude` with `CLAUDE_CODE_OAUTH_TOKEN` set to `<account>`'s vault token — the live Keychain slot is never touched, so multiple terminals can run different accounts simultaneously. Refreshes the vault token first if it has under `runMinTokenTtlMin` left, and verifies the token's identity before launching (an unverifiable token is refused, because claude silently falls back to the Keychain account otherwise). Pinned sessions bypass the picker, sync-back, and failover offer. |
+| `ccx refresh` | Refreshes every parked vault token that has under `runMinTokenTtlMin` left (the live account is skipped — Claude Code manages that one). Exit 0 when nothing failed; built for a launchd/cron timer. |
 | `ccx swap [name] [-c]` | Switches the live Keychain slot (defaults to "the other account" when two are imported). `-c`/`--continue` resumes with `claude --continue` after swapping. Refuses if another `claude` process is running unless `--force` is also passed. |
 | `ccx import <name> [--force]` | Captures the *current* live Keychain slot into vault entry `<name>`, fetching `account.uuid`/`email` via the profile endpoint. Used during setup and to recover a `needs-login` account after a fresh `/login`. |
 | `ccx sync` | Manually copies the live slot back into its owning vault entry (normally runs automatically on launcher exit and on the next `ccx` invocation if a sync was deferred). |
@@ -84,7 +86,8 @@ from `src/state.ts`'s `DEFAULT_CONFIG`):
 | `statuslinePassthrough` | `"bun x ccusage statusline"` | Command `ccx statusline` pipes the raw stdin JSON through and renders first, before appending ccx's segment. |
 | `statuslineTeePath` | `~/.onwatch/data/anthropic-statusline.json` | Where the raw statusline JSON is teed for onwatch's bridge (preserves the existing onwatch integration). |
 | `claudeCodeUaVersion` | `"2.1.199"` | `User-Agent` version string sent to the usage/profile endpoints (they're unofficial and version-sensitive). |
-| `skipPermissions` | `true` | Appends `--dangerously-skip-permissions` to every `claude` spawn (launch, failover resume, `swap -c`). Set `false` to keep Claude Code's permission prompts. |
+| `skipPermissions` | `true` | Appends `--dangerously-skip-permissions` to every `claude` spawn (launch, failover resume, `swap -c`, `run`). Set `false` to keep Claude Code's permission prompts. |
+| `runMinTokenTtlMin` | `360` | Minutes. `ccx run` and `ccx refresh` refresh a vault access token when it has less than this long left. |
 
 `~/.ccx/state.json` is ccx's own runtime state (active account, per-account
 snapshots, `sync_pending`, notifier throttle history) — no secrets, mode
@@ -95,6 +98,35 @@ but ccx no longer knows your account names. Recovery is manual: `ccx import
 <name>` re-registers the account that's currently logged in, and the other
 account needs a `claude` → `/login` → `ccx import <other> --force` round
 trip. There is no automatic Keychain-enumeration rebuild in the MVP.
+
+## Pinned sessions (`ccx run`) and proactive token refresh
+
+`ccx run <account>` sidesteps the single-live-slot model entirely: the session's
+account is baked in at launch via `CLAUDE_CODE_OAUTH_TOKEN` and never reads the
+Keychain again. Run `ccx run work` in one terminal and `ccx run personal` in
+another — "swapping" one of them is just exiting it and relaunching with
+`ccx run <other> -- --continue`; the other terminal never notices, and the
+concurrency guard doesn't apply.
+
+The one limit: a running pinned session cannot rotate its own token, so it dies
+when the access token expires (~8–12h from issuance). `ccx run` refreshes at
+launch so you start with a full window; to keep parked tokens warm around the
+clock, add a launchd timer for `ccx refresh`
+(`~/Library/LaunchAgents/dev.ccx.refresh.plist`):
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>dev.ccx.refresh</string>
+  <key>ProgramArguments</key><array>
+    <string>/bin/zsh</string><string>-lc</string><string>ccx refresh</string>
+  </array>
+  <key>StartInterval</key><integer>14400</integer>
+</dict></plist>
+```
+
+Load it with `launchctl load ~/Library/LaunchAgents/dev.ccx.refresh.plist`.
 
 ## Statusline wiring
 

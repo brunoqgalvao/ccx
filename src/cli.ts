@@ -5,6 +5,7 @@ import { realKeychain } from './keychain';
 import { runLaunch, runSwap } from './launcher';
 import { osascriptNotify } from './notifier';
 import { loadConfig, loadState, saveState } from './state';
+import { runRefresh, runRun } from './run';
 import { runStatus } from './status';
 import { runStatusline } from './statusline';
 import { runDoctor } from './doctor';
@@ -28,6 +29,8 @@ const HELP = `ccx — multi-account orchestrator for Claude Code
 Usage:
   ccx [claude args...]      pick best account, launch claude
   ccx status [--json]       both accounts: gauges, resets, active marker
+  ccx run <account> [args]  pinned session via CLAUDE_CODE_OAUTH_TOKEN (live slot untouched)
+  ccx refresh               refresh parked vault tokens nearing expiry (launchd/cron-friendly)
   ccx swap [name] [-c]      switch live account (-c: resume with claude --continue)
   ccx import <name> [--force]  capture the current claude login into the vault
   ccx sync                  capture rotated live tokens into the vault
@@ -66,6 +69,8 @@ async function main(): Promise<number> {
 async function dispatch(d: Deps, argv: string[]): Promise<number> {
   switch (argv[0]) {
     case 'status': return runStatus(d, argv.slice(1));
+    case 'run': return runRun(d, argv.slice(1));
+    case 'refresh': return runRefresh(d);
     case 'swap': return runSwap(d, argv.slice(1));
     case 'import': {
       const name = argv[1];

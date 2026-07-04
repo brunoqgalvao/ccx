@@ -51,4 +51,5 @@ export interface Config {
   statuslineTeePath: string;       // onwatch bridge file
   claudeCodeUaVersion: string;     // "2.1.199"
   skipPermissions: boolean;        // true — append --dangerously-skip-permissions to every claude spawn
+  runMinTokenTtlMin: number;       // 360 — `ccx run`/`ccx refresh` refresh a vault token with less than this many minutes left
 }

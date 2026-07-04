@@ -14,6 +14,7 @@ export const DEFAULT_CONFIG: Config = {
   statuslineTeePath: join(homedir(), '.onwatch/data/anthropic-statusline.json'),
   claudeCodeUaVersion: '2.1.199',
   skipPermissions: true,
+  runMinTokenTtlMin: 360,
 };
 
 import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
