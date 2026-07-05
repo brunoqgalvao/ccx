@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="https://github.com/brunoqgalvao/ccx/releases"><img src="https://img.shields.io/github/v/release/brunoqgalvao/ccx?color=818cf8" alt="release"/></a>
-  <img src="https://img.shields.io/badge/tests-129%20passing-9ece6a" alt="tests"/>
+  <img src="https://img.shields.io/badge/tests-138%20passing-9ece6a" alt="tests"/>
   <img src="https://img.shields.io/badge/platform-macOS-16161e" alt="macOS"/>
   <img src="https://img.shields.io/badge/runtime-bun-f7768e" alt="bun"/>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-e0af68" alt="MIT"/></a>
