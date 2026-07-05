@@ -128,6 +128,7 @@ from `src/state.ts`'s `DEFAULT_CONFIG`):
 | `claudeCodeUaVersion` | `"2.1.199"` | `User-Agent` version string sent to the usage/profile endpoints (they're unofficial and version-sensitive). |
 | `skipPermissions` | `true` | Appends `--dangerously-skip-permissions` to every `claude` spawn (launch, failover resume, `swap -c`, `run`). Set `false` to keep Claude Code's permission prompts. |
 | `runMinTokenTtlMin` | `360` | Minutes. `ccx run` and `ccx refresh` refresh a vault access token when it has less than this long left. |
+| `statuslineEta` | `"line2"` | Where reset countdowns render: `"line2"` = dedicated second statusline row (`↻ work 5h 3h2m · wk 2d15h`), `"inline"` = appended per gauge (`5h7%·3h2m`), `"off"` = hidden. |
 | `expiryNudgeMin` | `60` | Minutes. A gauge resetting within this window while unused headroom remains gets the 🔥 use-it-or-lose-it nudge (statusline + `ccx status`). |
 | `expiryNudgeUnusedPct` | `25` | Percentage points of unused quota below which the 🔥 nudge is not worth showing. |
 
@@ -197,11 +198,19 @@ both-account gauge segment on top:
 { "statusLine": { "type": "command", "command": "ccx statusline" } }
 ```
 
-Segment anatomy: `⚡meistrari 5h15%·3h2m wk49%·2d15h F81%✗ │ …` — `⚡` marks the
-active account; each gauge shows percent used, `·countdown` to its reset (5h
-and weekly; the Fable gauge resets with the weekly so it isn't repeated), `!`
-warning / `✗` critical-or-active-limit, `?` stale data, and 🔥 when the window
-resets soon with plenty unused — quota doesn't roll over, so burn it.
+Segment anatomy:
+
+```
+⚡meistrari 5h15% wk49% F81%✗ │ pqg 5h0% wk61% F100%✗
+↻ meistrari 5h 3h2m · wk 2d15h │ pqg wk 6h22m
+```
+
+`⚡` marks the active account; each gauge shows percent used, `!` warning /
+`✗` critical-or-active-limit, `?` stale data, and 🔥 when the window resets
+soon with plenty unused — quota doesn't roll over, so burn it. The `↻` second
+row shows time-to-reset per running window (a window that hasn't started —
+zero spend — has no reset scheduled, so it's omitted). Countdown placement is
+the `statuslineEta` config: `line2` (default), `inline`, or `off`.
 
 Edit `~/.claude/settings.json` yourself — ccx does not modify it (`ccx
 doctor` reports whether it's wired, but only reads the file).

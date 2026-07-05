@@ -41,7 +41,9 @@ export function buildSegment(state: State, cfg: Config, now: Date): string {
     const gauges = [...account.snapshot.gauges]
       .sort((a, b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind))
       .map((gauge) => {
-        const eta = gauge.kind === 'weekly_scoped' ? '' : fmtEta(Date.parse(gauge.resetsAt) - now.getTime()); // F resets with wk — don't repeat it
+        const eta = cfg.statuslineEta === 'inline' && gauge.kind !== 'weekly_scoped' // F resets with wk — don't repeat it
+          ? fmtEta(Date.parse(gauge.resetsAt) - now.getTime())
+          : '';
         const nudge = expiringUnused(gauge, cfg, now) ? '🔥' : '';
         return `${GAUGE_LABEL[gauge.kind]}${Math.round(gauge.percent)}%${eta ? `·${eta}` : ''}${nudge}${severityMark(gauge)}`;
       })
@@ -50,6 +52,23 @@ export function buildSegment(state: State, cfg: Config, now: Date): string {
     return `${marker}${name} ${gauges}${stale}`;
   });
   return parts.join(' │ ');
+}
+
+/** Second statusline row: per-account time-to-reset for windows that are actually running. */
+export function buildEtaLine(state: State, cfg: Config, now: Date): string {
+  if (cfg.statuslineEta !== 'line2') return '';
+  const parts = Object.entries(state.accounts)
+    .map(([name, account]) => {
+      const etas = (account.snapshot?.gauges ?? [])
+        .filter((gauge) => gauge.kind !== 'weekly_scoped') // F resets with wk
+        .sort((a, b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind))
+        .map((gauge) => ({ label: GAUGE_LABEL[gauge.kind], eta: fmtEta(Date.parse(gauge.resetsAt) - now.getTime()) }))
+        .filter((e) => e.eta !== '')
+        .map((e) => `${e.label} ${e.eta}`);
+      return etas.length > 0 ? `${name} ${etas.join(' · ')}` : null;
+    })
+    .filter((p): p is string => p !== null);
+  return parts.length > 0 ? `↻ ${parts.join(' │ ')}` : '';
 }
 
 function teeRaw(raw: string, path: string): void {
@@ -120,4 +139,6 @@ export async function runStatusline(d: Deps): Promise<void> {
   const rendered = await runPassthrough(d.cfg.statuslinePassthrough, raw);
   const segment = buildSegment(d.state, d.cfg, d.now());
   console.log(rendered ? `${rendered} ${segment}` : segment);
+  const etaLine = buildEtaLine(d.state, d.cfg, d.now());
+  if (etaLine) console.log(etaLine);
 }

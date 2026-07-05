@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { buildSegment, fmtEta } from '../src/statusline';
+import { buildEtaLine, buildSegment, fmtEta } from '../src/statusline';
 import type { Gauge } from '../src/types';
 import { fakeDeps } from './fakes';
 
@@ -21,6 +21,7 @@ describe('buildSegment', () => {
       accountUuid: 'u2', email: 'e2',
       snapshot: { fetchedAt: NOW.toISOString(), source: 'poll', gauges: [g('session', 4), g('weekly_all', 12)] },
     };
+    d.cfg.statuslineEta = 'inline';
     const seg = buildSegment(d.state, d.cfg, NOW);
     expect(seg).toBe('⚡personal 5h23%·1d wk44%·1d F75%! │ work 5h4%·1d wk12%·1d');
   });
@@ -31,6 +32,7 @@ describe('buildSegment', () => {
       snapshot: { fetchedAt: '2026-07-03T10:00:00Z', source: 'poll', gauges: [g('session', 5)] },
     };
     d.state.accounts.b = { accountUuid: 'u2', email: 'e2', needsLogin: true };
+    d.cfg.statuslineEta = 'inline';
     const seg = buildSegment(d.state, d.cfg, NOW);
     expect(seg).toBe('a 5h5%·1d? │ b ⚠login');
   });
@@ -40,6 +42,7 @@ describe('buildSegment', () => {
       accountUuid: 'u', email: 'e',
       snapshot: { fetchedAt: NOW.toISOString(), source: 'poll', gauges: [g('session', 100, 'critical')] },
     };
+    d.cfg.statuslineEta = 'inline';
     expect(buildSegment(d.state, d.cfg, NOW)).toBe('a 5h100%·1d✗');
   });
 });
@@ -68,6 +71,7 @@ describe('use-it-or-lose-it nudge', () => {
         { kind: 'session', percent: 8, severity: 'normal', resetsAt: soon, scopeModel: null, isActive: false },
       ] },
     };
+    d.cfg.statuslineEta = 'inline';
     expect(buildSegment(d.state, d.cfg, NOW)).toBe('a 5h8%·40m🔥');
   });
   test('no marker when nearly used up or reset is far', () => {
@@ -81,6 +85,49 @@ describe('use-it-or-lose-it nudge', () => {
         { kind: 'weekly_all', percent: 8, severity: 'normal', resetsAt: far, scopeModel: null, isActive: false },
       ] },
     };
+    d.cfg.statuslineEta = 'inline';
     expect(buildSegment(d.state, d.cfg, NOW)).toBe('a 5h90%·40m! wk8%·5h');
+  });
+});
+
+describe('statuslineEta modes', () => {
+  function twoAccounts() {
+    const d = fakeDeps();
+    d.state.activeAccount = 'work';
+    d.state.accounts.work = {
+      accountUuid: 'u1', email: 'e1',
+      snapshot: { fetchedAt: NOW.toISOString(), source: 'statusline', gauges: [
+        { kind: 'session', percent: 7, severity: 'normal', resetsAt: new Date(NOW.getTime() + (3 * 60 + 2) * 60_000).toISOString(), scopeModel: null, isActive: false },
+        { kind: 'weekly_all', percent: 28, severity: 'normal', resetsAt: new Date(NOW.getTime() + (2 * 24 + 15) * 3600_000).toISOString(), scopeModel: null, isActive: false },
+      ] },
+    };
+    d.state.accounts.idle = {
+      accountUuid: 'u2', email: 'e2',
+      snapshot: { fetchedAt: NOW.toISOString(), source: 'poll', gauges: [
+        { kind: 'session', percent: 0, severity: 'normal', resetsAt: new Date(NOW.getTime() - 1000).toISOString(), scopeModel: null, isActive: false },
+      ] },
+    };
+    return d;
+  }
+  test('default (line2): first line stays clean, eta line carries the countdowns', () => {
+    const d = twoAccounts();
+    expect(buildSegment(d.state, d.cfg, NOW)).toBe('⚡work 5h7% wk28% │ idle 5h0%');
+    expect(buildEtaLine(d.state, d.cfg, NOW)).toBe('↻ work 5h 3h2m · wk 2d15h');
+  });
+  test('off: no inline etas and no eta line', () => {
+    const d = twoAccounts();
+    d.cfg.statuslineEta = 'off';
+    expect(buildSegment(d.state, d.cfg, NOW)).toBe('⚡work 5h7% wk28% │ idle 5h0%');
+    expect(buildEtaLine(d.state, d.cfg, NOW)).toBe('');
+  });
+  test('inline: no separate eta line', () => {
+    const d = twoAccounts();
+    d.cfg.statuslineEta = 'inline';
+    expect(buildEtaLine(d.state, d.cfg, NOW)).toBe('');
+  });
+  test('eta line empty when no window has a future reset', () => {
+    const d = twoAccounts();
+    delete d.state.accounts.work;
+    expect(buildEtaLine(d.state, d.cfg, NOW)).toBe('');
   });
 });

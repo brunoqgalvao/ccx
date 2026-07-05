@@ -53,5 +53,6 @@ export interface Config {
   skipPermissions: boolean;        // true — append --dangerously-skip-permissions to every claude spawn
   runMinTokenTtlMin: number;       // 360 — `ccx run`/`ccx refresh` refresh a vault token with less than this many minutes left
   expiryNudgeMin: number;          // 60 — flag a gauge resetting within this many minutes while unused headroom remains
+  statuslineEta: 'line2' | 'inline' | 'off'; // where reset countdowns render: dedicated second line (default), inline per gauge, or hidden
   expiryNudgeUnusedPct: number;    // 25 — minimum unused percentage points for the use-it-or-lose-it nudge
 }

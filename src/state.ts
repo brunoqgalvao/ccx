@@ -16,6 +16,7 @@ export const DEFAULT_CONFIG: Config = {
   skipPermissions: true,
   runMinTokenTtlMin: 360,
   expiryNudgeMin: 60,
+  statuslineEta: 'line2',
   expiryNudgeUnusedPct: 25,
 };
 
