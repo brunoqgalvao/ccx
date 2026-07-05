@@ -99,6 +99,7 @@ separate "account names" config entry.
 | `ccx status [--json]` | Refreshes both accounts' snapshots and prints gauges, severities, reset times, and the active marker. |
 | `ccx run <account> [claude args...]` | **Pinned session.** Launches `claude` with `CLAUDE_CODE_OAUTH_TOKEN` set to `<account>`'s vault token — the live Keychain slot is never touched, so multiple terminals can run different accounts simultaneously. Refreshes the vault token first if it has under `runMinTokenTtlMin` left, and verifies the token's identity before launching (an unverifiable token is refused, because claude silently falls back to the Keychain account otherwise). Pinned sessions bypass the picker, sync-back, and failover offer. |
 | `ccx refresh` | Refreshes every parked vault token that has under `runMinTokenTtlMin` left (the live account is skipped — Claude Code manages that one). Exit 0 when nothing failed; built for a launchd/cron timer. |
+| `ccx warm` | Starts any idle 5h window with a tiny silent ping (`warmModel`, default haiku). The 5h window anchors at your *first* request — warming means the next reset lands sooner during real work, and an unused window costs nothing. Run it from a launchd timer (~15 min). |
 | `ccx swap [name] [-c]` | Switches the live Keychain slot (defaults to "the other account" when two are imported). `-c`/`--continue` resumes with `claude --continue` after swapping. Refuses if another `claude` process is running unless `--force` is also passed. |
 | `ccx import <name> [--force]` | Captures the *current* live Keychain slot into vault entry `<name>`, fetching `account.uuid`/`email` via the profile endpoint. Used during setup and to recover a `needs-login` account after a fresh `/login`. |
 | `ccx sync` | Manually copies the live slot back into its owning vault entry (normally runs automatically on launcher exit and on the next `ccx` invocation if a sync was deferred). |
@@ -120,6 +121,7 @@ from `src/state.ts`'s `DEFAULT_CONFIG`):
 | `pollMinIntervalS` | `300` | Seconds. Floor between usage-endpoint polls per account (also doubles as the 429 backoff). |
 | `staleAfterMin` | `30` | Minutes. Snapshot age past which the picker/status mark data stale and try a fresh poll before using it. |
 | `tiebreakMargin` | `5` | Percentage points. Headroom difference within which the picker tiebreaks on soonest-reset instead of raw headroom. |
+| `warmModel` | `"haiku"` | Model for `ccx warm`'s window-starting ping — cheap, and never touches the model-scoped pool. |
 | `warningPct` | `75` | Percent usage at/above which a gauge is `warning` severity (statusline-sourced gauges only — the usage endpoint reports its own severity). |
 | `criticalPct` | `95` | Percent usage at/above which a gauge is `critical` severity (statusline-sourced gauges only). |
 | `downgradeModel` | `"opus"` | Model passed to `claude --continue --model <this>` when both accounts' scoped (Fable) pools are topped but general quota remains. |

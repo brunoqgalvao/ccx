@@ -54,5 +54,6 @@ export interface Config {
   runMinTokenTtlMin: number;       // 360 — `ccx run`/`ccx refresh` refresh a vault token with less than this many minutes left
   expiryNudgeMin: number;          // 60 — flag a gauge resetting within this many minutes while unused headroom remains
   statuslineEta: 'line2' | 'inline' | 'off'; // where reset countdowns render: dedicated second line (default), inline per gauge, or hidden
+  warmModel: string;               // 'haiku' — model for `ccx warm`'s window-starting ping (cheap, never touches the Fable pool)
   expiryNudgeUnusedPct: number;    // 25 — minimum unused percentage points for the use-it-or-lose-it nudge
 }

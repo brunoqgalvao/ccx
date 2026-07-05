@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { prepareRun, runRefresh, runRun, shouldResume } from '../src/run';
+import { needsWarm, prepareRun, runRefresh, runRun, runWarm, shouldResume } from '../src/run';
 import { vaultService, LIVE_SERVICE } from '../src/keychain';
 import { blob, fakeApi, fakeDeps, fakeKeychain } from './fakes';
 
@@ -153,5 +153,51 @@ describe('runRun auto-resume', () => {
     expect(spawned[0].token).toBe('at-1');
     expect(spawned[1].token).toBe('at-2');                       // resumed on the REFRESHED token
     expect(spawned[1].args).toContain('--continue');
+  });
+});
+
+describe('needsWarm', () => {
+  const acct = (resetsAt: string | null, needsLogin = false) => ({
+    accountUuid: 'u', email: 'e', needsLogin,
+    ...(resetsAt === null ? {} : { snapshot: { fetchedAt: new Date(NOW).toISOString(), source: 'poll' as const, gauges: [
+      { kind: 'session' as const, percent: 0, severity: 'normal' as const, resetsAt, scopeModel: null, isActive: false },
+    ] } }),
+  });
+  test('idle session window (past reset) needs warming', () => {
+    expect(needsWarm(acct(new Date(NOW - 1000).toISOString()), new Date(NOW))).toBe(true);
+  });
+  test('running window does not', () => {
+    expect(needsWarm(acct(new Date(NOW + 3600_000).toISOString()), new Date(NOW))).toBe(false);
+  });
+  test('no snapshot at all → warm (window definitely not running)', () => {
+    expect(needsWarm(acct(null), new Date(NOW))).toBe(true);
+  });
+  test('needs-login accounts are never warmed', () => {
+    expect(needsWarm(acct(new Date(NOW - 1000).toISOString(), true), new Date(NOW))).toBe(false);
+  });
+});
+
+describe('runWarm', () => {
+  test('pings only idle accounts, with the pinned token', async () => {
+    const kc = fakeKeychain({
+      [vaultService('bqg')]: blob('at-bqg', 'rt-bqg', FRESH),
+      [vaultService('mei')]: blob('at-mei', 'rt-mei', FRESH),
+    });
+    const api = fakeApi({ profile: (t) => ({ ok: true, uuid: t === 'at-bqg' ? 'uuid-bqg' : 'uuid-mei', email: 'x' }) });
+    const d = depsWith({ kc, api });
+    const past = new Date(NOW - 1000).toISOString();
+    const future = new Date(NOW + 3600_000).toISOString();
+    d.state.accounts.bqg.snapshot = { fetchedAt: new Date(NOW).toISOString(), source: 'poll', gauges: [
+      { kind: 'session', percent: 0, severity: 'normal', resetsAt: past, scopeModel: null, isActive: false },
+    ] };
+    d.state.accounts.mei.snapshot = { fetchedAt: new Date(NOW).toISOString(), source: 'poll', gauges: [
+      { kind: 'session', percent: 12, severity: 'normal', resetsAt: future, scopeModel: null, isActive: false },
+    ] };
+    const pinged: { args: string[]; token: string }[] = [];
+    const code = await runWarm(d, async (args, token) => { pinged.push({ args, token }); return 0; });
+    expect(code).toBe(0);
+    expect(pinged.length).toBe(1);
+    expect(pinged[0].token).toBe('at-bqg');
+    expect(pinged[0].args).toContain('--model');
   });
 });

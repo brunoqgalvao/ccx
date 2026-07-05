@@ -17,6 +17,7 @@ export const DEFAULT_CONFIG: Config = {
   runMinTokenTtlMin: 360,
   expiryNudgeMin: 60,
   statuslineEta: 'line2',
+  warmModel: 'haiku',
   expiryNudgeUnusedPct: 25,
 };
 

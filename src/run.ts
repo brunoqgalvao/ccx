@@ -1,8 +1,10 @@
 import { parseTokens } from './creds';
 import type { Deps } from './deps';
+import type { AccountState } from './types';
 import { vaultService } from './keychain';
 import { withPermissionFlag } from './launcher';
-import { refreshParked } from './vault';
+import { refreshAllSnapshots } from './usage';
+import { refreshParked, syncBack } from './vault';
 
 export type RunPrep = { ok: true; token: string; expiresAt: number; warnings: string[] } | { ok: false; reason: string };
 
@@ -102,6 +104,39 @@ export async function runRefresh(d: Deps): Promise<number> {
     if (r.ok) console.error(`ccx: ${name}: refreshed`);
     else if (/live|active account/.test(r.reason ?? '')) console.error(`ccx: ${name}: live — refresh is Claude Code's job`);
     else { console.error(`ccx: ${name}: ${r.reason}`); failures++; }
+  }
+  return failures > 0 ? 1 : 0;
+}
+
+/** The 5h window anchors at the FIRST request — an idle window means quota sitting
+ *  still. Warming it starts the clock so the next reset lands sooner during real work. */
+export function needsWarm(account: AccountState, now: Date): boolean {
+  if (account.needsLogin) return false;
+  const session = account.snapshot?.gauges.find((g) => g.kind === 'session');
+  if (!session) return true; // no data = window certainly not running
+  return Date.parse(session.resetsAt) <= now.getTime();
+}
+
+/** Silent variant for warm pings: no terminal stdio, output discarded. */
+export async function spawnClaudeQuiet(args: string[], token: string): Promise<number> {
+  const p = Bun.spawn(['claude', ...args], {
+    stdin: 'ignore', stdout: 'ignore', stderr: 'ignore',
+    env: { ...process.env, CLAUDE_CODE_OAUTH_TOKEN: token },
+  });
+  return await p.exited;
+}
+
+export async function runWarm(d: Deps, spawn = spawnClaudeQuiet): Promise<number> {
+  await syncBack(d).catch(() => {}); // freshen the active account's vault copy first
+  await refreshAllSnapshots(d).catch(() => {}); // stale data must not skip a warm (poll floor still applies)
+  let failures = 0;
+  for (const [name, account] of Object.entries(d.state.accounts)) {
+    if (!needsWarm(account, d.now())) { console.error(`ccx: ${name}: window running — no warm needed`); continue; }
+    const prep = await prepareRun(d, name);
+    if (!prep.ok) { console.error(`ccx: ${name}: skipped — ${prep.reason}`); failures++; continue; }
+    const code = await spawn(['-p', 'ok', '--model', d.cfg.warmModel], prep.token);
+    if (code === 0) console.error(`ccx: ${name}: window warmed — 5h clock started`);
+    else { console.error(`ccx: ${name}: warm ping exited ${code}`); failures++; }
   }
   return failures > 0 ? 1 : 0;
 }
