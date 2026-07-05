@@ -1,19 +1,59 @@
-# ccx — Multi-Account Orchestrator for Claude Code
+<p align="center">
+  <img src="assets/logo.svg" alt="ccx — multi-account orchestrator for Claude Code" width="560"/>
+</p>
 
-`ccx` is a Bun/TypeScript CLI that vaults two Anthropic accounts' Claude Code
-credentials in the macOS Keychain, tracks all three rate-limit gauges (5h
-session, weekly-all, weekly-scoped/Fable) per account, launches `claude` on
-whichever account has the most model-aware headroom, and assists
-swap-and-resume failover when a limit is hit mid-session. It does not proxy
-API traffic — switching happens at process boundaries (exit `claude`, swap
-the live Keychain slot, relaunch with `--continue`). macOS only, zero runtime
-dependencies. Full design and rationale:
-[`docs/superpowers/specs/2026-07-03-ccx-multi-account-orchestrator-design.md`](docs/superpowers/specs/2026-07-03-ccx-multi-account-orchestrator-design.md).
+<p align="center">
+  <b>One <code>claude</code>, every account you've got.</b><br/>
+  ccx juggles multiple Claude subscription accounts so you never stare at a rate-limit screen again.
+</p>
 
-This README documents Milestones 1 + 2 (vault, picker, launch, status,
-manual swap, assisted failover offer, statusline bridge, notifier).
-Headless auto-failover for `-p` mode and a launchd notifier agent are an
-explicit follow-up, not implemented here.
+<p align="center">
+  <a href="https://github.com/brunoqgalvao/ccx/releases"><img src="https://img.shields.io/github/v/release/brunoqgalvao/ccx?color=818cf8" alt="release"/></a>
+  <img src="https://img.shields.io/badge/tests-129%20passing-9ece6a" alt="tests"/>
+  <img src="https://img.shields.io/badge/platform-macOS-16161e" alt="macOS"/>
+  <img src="https://img.shields.io/badge/runtime-bun-f7768e" alt="bun"/>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-e0af68" alt="MIT"/></a>
+</p>
+
+---
+
+You know the moment. Deep in a session, context warmed up, and Claude Code says
+**"limit reached, resets at 3 AM."** Meanwhile your other account is sitting
+there at 4% usage, fully rested. So you `/logout`, `/login`, fish for the 2FA
+mail, `--continue`, and swear you'll automate this someday.
+
+**Someday is now.** ccx keeps every account's credentials in the macOS
+Keychain, watches all three rate-limit gauges per account (5h session, weekly,
+model-scoped weekly), and:
+
+- 🚀 **`ccx`** — launches `claude` on whichever account has the most headroom
+  *for the model you're about to use*, and tells you why
+- 🔁 **swap & resume** — hit a limit mid-session? One `[Y/n]` and the same
+  conversation continues on the other account (`claude --continue`, cache-aware:
+  if the limit resets in minutes, it tells you to wait instead)
+- 📌 **`ccx run work`** — pin a terminal to an account. Different terminals,
+  different accounts, simultaneously; sessions that outlive their token
+  refresh and resume themselves
+- 📊 **statusline** — every account's gauges + time-to-reset, live inside
+  Claude Code, with a 🔥 nudge when quota is about to reset unused:
+
+  ```
+  ⚡work 5h32%·2h11m wk49%·2d15h F81%✗ │ personal 5h8%·40m🔥 wk61%·6h22m F100%✗
+  ```
+- 🩺 **`ccx doctor`** — self-checks everything: keychain, tokens, endpoints,
+  wiring
+
+No proxy, no MITM, no telemetry: your tokens never leave the Keychain, and
+switching happens at process boundaries. ~2k lines of Bun/TypeScript, zero
+runtime dependencies, 129 tests.
+
+> **Fair-use note:** ccx orchestrates accounts *you own and pay for* — think
+> work + personal subscription. It is not a credential-sharing tool.
+
+Design & rationale live in
+[`docs/superpowers/specs/`](docs/superpowers/specs/2026-07-03-ccx-multi-account-orchestrator-design.md).
+Headless auto-failover for `-p` mode and a launchd notifier are the next
+milestone.
 
 ## Requirements
 
