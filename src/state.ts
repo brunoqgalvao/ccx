@@ -15,6 +15,8 @@ export const DEFAULT_CONFIG: Config = {
   claudeCodeUaVersion: '2.1.199',
   skipPermissions: true,
   runMinTokenTtlMin: 360,
+  expiryNudgeMin: 60,
+  expiryNudgeUnusedPct: 25,
 };
 
 import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';

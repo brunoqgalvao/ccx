@@ -88,6 +88,8 @@ from `src/state.ts`'s `DEFAULT_CONFIG`):
 | `claudeCodeUaVersion` | `"2.1.199"` | `User-Agent` version string sent to the usage/profile endpoints (they're unofficial and version-sensitive). |
 | `skipPermissions` | `true` | Appends `--dangerously-skip-permissions` to every `claude` spawn (launch, failover resume, `swap -c`, `run`). Set `false` to keep Claude Code's permission prompts. |
 | `runMinTokenTtlMin` | `360` | Minutes. `ccx run` and `ccx refresh` refresh a vault access token when it has less than this long left. |
+| `expiryNudgeMin` | `60` | Minutes. A gauge resetting within this window while unused headroom remains gets the 🔥 use-it-or-lose-it nudge (statusline + `ccx status`). |
+| `expiryNudgeUnusedPct` | `25` | Percentage points of unused quota below which the 🔥 nudge is not worth showing. |
 
 `~/.ccx/state.json` is ccx's own runtime state (active account, per-account
 snapshots, `sync_pending`, notifier throttle history) — no secrets, mode
@@ -154,6 +156,12 @@ both-account gauge segment on top:
 ```json
 { "statusLine": { "type": "command", "command": "ccx statusline" } }
 ```
+
+Segment anatomy: `⚡meistrari 5h15%·3h2m wk49%·2d15h F81%✗ │ …` — `⚡` marks the
+active account; each gauge shows percent used, `·countdown` to its reset (5h
+and weekly; the Fable gauge resets with the weekly so it isn't repeated), `!`
+warning / `✗` critical-or-active-limit, `?` stale data, and 🔥 when the window
+resets soon with plenty unused — quota doesn't roll over, so burn it.
 
 Edit `~/.claude/settings.json` yourself — ccx does not modify it (`ccx
 doctor` reports whether it's wired, but only reads the file).

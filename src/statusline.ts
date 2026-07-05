@@ -16,6 +16,23 @@ function severityMark(gauge: Gauge): string {
   return '';
 }
 
+/** Compact countdown: 42m / 2h49m / 3h / 2d19h / 3d; '' when past (idle window) or unknown. */
+export function fmtEta(msLeft: number): string {
+  if (Number.isNaN(msLeft) || msLeft <= 0) return '';
+  const m = Math.round(msLeft / 60_000);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h${m % 60 ? `${m % 60}m` : ''}`;
+  const dDays = Math.floor(h / 24);
+  return `${dDays}d${h % 24 ? `${h % 24}h` : ''}`;
+}
+
+/** Quota is use-it-or-lose-it: flag a gauge whose reset is imminent while plenty is unused. */
+export function expiringUnused(gauge: Gauge, cfg: Config, now: Date): boolean {
+  const msLeft = Date.parse(gauge.resetsAt) - now.getTime();
+  return msLeft > 0 && msLeft <= cfg.expiryNudgeMin * 60_000 && 100 - gauge.percent >= cfg.expiryNudgeUnusedPct;
+}
+
 export function buildSegment(state: State, cfg: Config, now: Date): string {
   const parts = Object.entries(state.accounts).map(([name, account]) => {
     const marker = state.activeAccount === name ? '⚡' : '';
@@ -23,7 +40,11 @@ export function buildSegment(state: State, cfg: Config, now: Date): string {
     if (!account.snapshot || account.snapshot.gauges.length === 0) return `${marker}${name} —`;
     const gauges = [...account.snapshot.gauges]
       .sort((a, b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind))
-      .map((gauge) => `${GAUGE_LABEL[gauge.kind]}${Math.round(gauge.percent)}%${severityMark(gauge)}`)
+      .map((gauge) => {
+        const eta = gauge.kind === 'weekly_scoped' ? '' : fmtEta(Date.parse(gauge.resetsAt) - now.getTime()); // F resets with wk — don't repeat it
+        const nudge = expiringUnused(gauge, cfg, now) ? '🔥' : '';
+        return `${GAUGE_LABEL[gauge.kind]}${Math.round(gauge.percent)}%${eta ? `·${eta}` : ''}${nudge}${severityMark(gauge)}`;
+      })
       .join(' ');
     const stale = isStale(account.snapshot, cfg, now) ? '?' : '';
     return `${marker}${name} ${gauges}${stale}`;

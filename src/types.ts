@@ -52,4 +52,6 @@ export interface Config {
   claudeCodeUaVersion: string;     // "2.1.199"
   skipPermissions: boolean;        // true — append --dangerously-skip-permissions to every claude spawn
   runMinTokenTtlMin: number;       // 360 — `ccx run`/`ccx refresh` refresh a vault token with less than this many minutes left
+  expiryNudgeMin: number;          // 60 — flag a gauge resetting within this many minutes while unused headroom remains
+  expiryNudgeUnusedPct: number;    // 25 — minimum unused percentage points for the use-it-or-lose-it nudge
 }

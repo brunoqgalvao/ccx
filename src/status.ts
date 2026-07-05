@@ -1,6 +1,7 @@
 import type { Deps } from './deps';
 import { checkAndNotify } from './notifier';
 import { isStale } from './picker';
+import { expiringUnused, fmtEta } from './statusline';
 import { refreshAllSnapshots } from './usage';
 
 export async function runStatus(d: Deps, args: string[]): Promise<number> {
@@ -23,6 +24,9 @@ export async function runStatus(d: Deps, args: string[]): Promise<number> {
       const scope = gauge.scopeModel ? ` [${gauge.scopeModel}]` : '';
       const resets = new Date(gauge.resetsAt).toLocaleString();
       console.log(`   ${gauge.kind}${scope}: ${Math.round(gauge.percent)}% (${gauge.severity}) resets ${resets}`);
+      if (expiringUnused(gauge, d.cfg, d.now())) {
+        console.log(`   🔥 ${gauge.kind}${scope} resets in ${fmtEta(Date.parse(gauge.resetsAt) - d.now().getTime())} with ${Math.round(100 - gauge.percent)}% unused — use it or lose it`);
+      }
     }
     const age = Math.round((d.now().getTime() - Date.parse(account.snapshot.fetchedAt)) / 60_000);
     console.log(`   source: ${account.snapshot.source}, ${age}m ago${isStale(account.snapshot, d.cfg, d.now()) ? ' (STALE)' : ''}`);
