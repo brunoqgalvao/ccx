@@ -33,6 +33,30 @@ export function expiringUnused(gauge: Gauge, cfg: Config, now: Date): boolean {
   return msLeft > 0 && msLeft <= cfg.expiryNudgeMin * 60_000 && 100 - gauge.percent >= cfg.expiryNudgeUnusedPct;
 }
 
+const CTX_WARN_PCT = 80;
+
+/** The session's own basics (model · ctx% · effort) from the statusline stdin —
+ *  fields the default Claude Code statusline shows and ccx used to discard. */
+export function buildBasicSegment(input: unknown, cfg: Config): string {
+  if (!cfg.statuslineBasic || typeof input !== 'object' || input === null) return '';
+  const o = input as Record<string, any>;
+  const parts: string[] = [];
+  const model = o.model?.display_name;
+  if (typeof model === 'string' && model) parts.push(model);
+  const ctx = o.context_window?.used_percentage;
+  if (typeof ctx === 'number' && Number.isFinite(ctx)) {
+    parts.push(`ctx ${Math.round(ctx)}%${ctx >= CTX_WARN_PCT ? '!' : ''}`);
+  }
+  const effort = o.effort?.level;
+  if (typeof effort === 'string' && effort) parts.push(effort === 'medium' ? 'med' : effort);
+  return parts.join(' · ');
+}
+
+export function composeFirstLine(passthrough: string, basic: string, accounts: string): string {
+  const tail = [basic, accounts].filter((s) => s !== '').join(' │ ');
+  return [passthrough, tail].filter((s) => s !== '').join(' ');
+}
+
 export function buildSegment(state: State, cfg: Config, now: Date): string {
   const parts = Object.entries(state.accounts).map(([name, account]) => {
     const marker = state.activeAccount === name ? '⚡' : '';
@@ -137,8 +161,9 @@ export async function runStatusline(d: Deps): Promise<void> {
   }
 
   const rendered = await runPassthrough(d.cfg.statuslinePassthrough, raw);
+  const basic = buildBasicSegment(input, d.cfg);
   const segment = buildSegment(d.state, d.cfg, d.now());
-  console.log(rendered ? `${rendered} ${segment}` : segment);
+  console.log(composeFirstLine(rendered, basic, segment));
   const etaLine = buildEtaLine(d.state, d.cfg, d.now());
   if (etaLine) console.log(etaLine);
 }

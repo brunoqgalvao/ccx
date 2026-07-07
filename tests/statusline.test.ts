@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { buildEtaLine, buildSegment, fmtEta } from '../src/statusline';
+import { buildBasicSegment, buildEtaLine, buildSegment, composeFirstLine, fmtEta } from '../src/statusline';
 import type { Gauge } from '../src/types';
 import { fakeDeps } from './fakes';
 
@@ -44,6 +44,54 @@ describe('buildSegment', () => {
     };
     d.cfg.statuslineEta = 'inline';
     expect(buildSegment(d.state, d.cfg, NOW)).toBe('a 5h100%·1d✗');
+  });
+});
+
+describe('buildBasicSegment', () => {
+  const full = {
+    model: { id: 'claude-fable-5', display_name: 'Fable 5' },
+    context_window: { used_percentage: 5 },
+    effort: { level: 'medium' },
+  };
+  test('renders model, context, and abbreviated effort', () => {
+    const d = fakeDeps();
+    expect(buildBasicSegment(full, d.cfg)).toBe('Fable 5 · ctx 5% · med');
+  });
+  test('context at 80%+ gets the warning mark', () => {
+    const d = fakeDeps();
+    expect(buildBasicSegment({ ...full, context_window: { used_percentage: 83 } }, d.cfg)).toBe('Fable 5 · ctx 83%! · med');
+  });
+  test('non-medium efforts render verbatim', () => {
+    const d = fakeDeps();
+    expect(buildBasicSegment({ ...full, effort: { level: 'xhigh' } }, d.cfg)).toBe('Fable 5 · ctx 5% · xhigh');
+  });
+  test('missing fields are skipped; all missing yields empty string', () => {
+    const d = fakeDeps();
+    expect(buildBasicSegment({ model: { display_name: 'Fable 5' } }, d.cfg)).toBe('Fable 5');
+    expect(buildBasicSegment({ context_window: { used_percentage: 12 } }, d.cfg)).toBe('ctx 12%');
+    expect(buildBasicSegment({}, d.cfg)).toBe('');
+    expect(buildBasicSegment(null, d.cfg)).toBe('');
+    expect(buildBasicSegment('garbage', d.cfg)).toBe('');
+  });
+  test('fractional context percentage rounds', () => {
+    const d = fakeDeps();
+    expect(buildBasicSegment({ context_window: { used_percentage: 57.6 } }, d.cfg)).toBe('ctx 58%');
+  });
+  test('statuslineBasic: false disables the segment', () => {
+    const d = fakeDeps();
+    d.cfg.statuslineBasic = false;
+    expect(buildBasicSegment(full, d.cfg)).toBe('');
+  });
+});
+
+describe('composeFirstLine', () => {
+  test('passthrough leads, basic and accounts join with the segment separator', () => {
+    expect(composeFirstLine('cc$1.19', 'Fable 5 · ctx 5% · med', 'a 5h5%')).toBe('cc$1.19 Fable 5 · ctx 5% · med │ a 5h5%');
+  });
+  test('empty pieces vanish without stray separators', () => {
+    expect(composeFirstLine('', 'Fable 5', 'a 5h5%')).toBe('Fable 5 │ a 5h5%');
+    expect(composeFirstLine('', '', 'a 5h5%')).toBe('a 5h5%');
+    expect(composeFirstLine('cc$1.19', '', 'a 5h5%')).toBe('cc$1.19 a 5h5%');
   });
 });
 
