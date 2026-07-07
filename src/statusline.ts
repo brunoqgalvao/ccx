@@ -35,6 +35,25 @@ export function expiringUnused(gauge: Gauge, cfg: Config, now: Date): boolean {
 
 const CTX_WARN_PCT = 80;
 
+/** 51_109 → '51k', 1_000_000 → '1M', 830 → '830'. */
+export function fmtTokens(n: number): string {
+  if (n >= 1_000_000) {
+    const m = n / 1_000_000;
+    return `${Number.isInteger(m) ? m : m.toFixed(1)}M`;
+  }
+  if (n >= 1_000) return `${Math.round(n / 1_000)}k`;
+  return `${Math.round(n)}`;
+}
+
+function ctxTokensUsed(cw: Record<string, any>): number | null {
+  const usage = cw.current_usage;
+  if (typeof usage !== 'object' || usage === null) return null;
+  const total = Object.values(usage as Record<string, unknown>)
+    .filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
+    .reduce((a, b) => a + b, 0);
+  return total > 0 ? total : null;
+}
+
 /** The session's own basics (model · ctx% · effort) from the statusline stdin —
  *  fields the default Claude Code statusline shows and ccx used to discard. */
 export function buildBasicSegment(input: unknown, cfg: Config): string {
@@ -43,9 +62,13 @@ export function buildBasicSegment(input: unknown, cfg: Config): string {
   const parts: string[] = [];
   const model = o.model?.display_name;
   if (typeof model === 'string' && model) parts.push(model);
-  const ctx = o.context_window?.used_percentage;
+  const cw = o.context_window;
+  const ctx = cw?.used_percentage;
   if (typeof ctx === 'number' && Number.isFinite(ctx)) {
-    parts.push(`ctx ${Math.round(ctx)}%${ctx >= CTX_WARN_PCT ? '!' : ''}`);
+    const used = ctxTokensUsed(cw);
+    const size = typeof cw.context_window_size === 'number' && cw.context_window_size > 0 ? cw.context_window_size : null;
+    const fraction = used !== null && size !== null ? ` (${fmtTokens(used)}/${fmtTokens(size)})` : '';
+    parts.push(`ctx ${Math.round(ctx)}%${ctx >= CTX_WARN_PCT ? '!' : ''}${fraction}`);
   }
   const effort = o.effort?.level;
   if (typeof effort === 'string' && effort) parts.push(effort === 'medium' ? 'med' : effort);

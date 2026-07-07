@@ -50,20 +50,35 @@ describe('buildSegment', () => {
 describe('buildBasicSegment', () => {
   const full = {
     model: { id: 'claude-fable-5', display_name: 'Fable 5' },
-    context_window: { used_percentage: 5 },
+    context_window: {
+      used_percentage: 5,
+      context_window_size: 1_000_000,
+      current_usage: { input_tokens: 2, output_tokens: 125, cache_creation_input_tokens: 965, cache_read_input_tokens: 50_017 },
+    },
     effort: { level: 'medium' },
   };
-  test('renders model, context, and abbreviated effort', () => {
+  test('renders model, context % with used/size tokens, and abbreviated effort', () => {
     const d = fakeDeps();
-    expect(buildBasicSegment(full, d.cfg)).toBe('Fable 5 · ctx 5% · med');
+    expect(buildBasicSegment(full, d.cfg)).toBe('Fable 5 · ctx 5% (51k/1M) · med');
   });
   test('context at 80%+ gets the warning mark', () => {
     const d = fakeDeps();
-    expect(buildBasicSegment({ ...full, context_window: { used_percentage: 83 } }, d.cfg)).toBe('Fable 5 · ctx 83%! · med');
+    const hot = { ...full.context_window, used_percentage: 83, current_usage: { input_tokens: 830_000 } };
+    expect(buildBasicSegment({ ...full, context_window: hot }, d.cfg)).toBe('Fable 5 · ctx 83%! (830k/1M) · med');
+  });
+  test('token fraction is omitted when usage or window size is missing', () => {
+    const d = fakeDeps();
+    expect(buildBasicSegment({ ...full, context_window: { used_percentage: 12 } }, d.cfg)).toBe('Fable 5 · ctx 12% · med');
+    expect(buildBasicSegment({ ...full, context_window: { used_percentage: 12, current_usage: { input_tokens: 5 } } }, d.cfg)).toBe('Fable 5 · ctx 12% · med');
+  });
+  test('small windows render in k on both sides', () => {
+    const d = fakeDeps();
+    const small = { used_percentage: 57.6, context_window_size: 200_000, current_usage: { input_tokens: 115_200 } };
+    expect(buildBasicSegment({ context_window: small }, d.cfg)).toBe('ctx 58% (115k/200k)');
   });
   test('non-medium efforts render verbatim', () => {
     const d = fakeDeps();
-    expect(buildBasicSegment({ ...full, effort: { level: 'xhigh' } }, d.cfg)).toBe('Fable 5 · ctx 5% · xhigh');
+    expect(buildBasicSegment({ ...full, effort: { level: 'xhigh' } }, d.cfg)).toBe('Fable 5 · ctx 5% (51k/1M) · xhigh');
   });
   test('missing fields are skipped; all missing yields empty string', () => {
     const d = fakeDeps();

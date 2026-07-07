@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="https://github.com/brunoqgalvao/ccx/releases"><img src="https://img.shields.io/github/v/release/brunoqgalvao/ccx?color=818cf8" alt="release"/></a>
-  <img src="https://img.shields.io/badge/tests-152%20passing-9ece6a" alt="tests"/>
+  <img src="https://img.shields.io/badge/tests-154%20passing-9ece6a" alt="tests"/>
   <img src="https://img.shields.io/badge/platform-macOS-16161e" alt="macOS"/>
   <img src="https://img.shields.io/badge/runtime-bun-f7768e" alt="bun"/>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-e0af68" alt="MIT"/></a>
@@ -132,7 +132,7 @@ from `src/state.ts`'s `DEFAULT_CONFIG`):
 | `claudeCodeUaVersion` | `"2.1.199"` | `User-Agent` version string sent to the usage/profile endpoints (they're unofficial and version-sensitive). |
 | `skipPermissions` | `true` | Appends `--dangerously-skip-permissions` to every `claude` spawn (launch, failover resume, `swap -c`, `run`). Set `false` to keep Claude Code's permission prompts. |
 | `runMinTokenTtlMin` | `360` | Minutes. `ccx run` and `ccx refresh` refresh a vault access token when it has less than this long left. |
-| `statuslineBasic` | `true` | Renders the session's own basics (`Fable 5 · ctx 9% · med` — model, context used, effort) ahead of the accounts segment; ctx gets a `!` at 80%+. |
+| `statuslineBasic` | `true` | Renders the session's own basics (`Fable 5 · ctx 9% (91k/1M) · med` — model, context used %, tokens used/window, effort) ahead of the accounts segment; ctx gets a `!` at 80%+. |
 | `statuslineEta` | `"line2"` | Where reset countdowns render: `"line2"` = dedicated second statusline row (`↻ work 5h 3h2m · wk 2d15h`), `"inline"` = appended per gauge (`5h7%·3h2m`), `"off"` = hidden. |
 | `expiryNudgeMin` | `60` | Minutes. A gauge resetting within this window while unused headroom remains gets the 🔥 use-it-or-lose-it nudge (statusline + `ccx status`). |
 | `expiryNudgeUnusedPct` | `25` | Percentage points of unused quota below which the 🔥 nudge is not worth showing. |
