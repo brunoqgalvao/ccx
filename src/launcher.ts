@@ -4,7 +4,8 @@ import { join } from 'node:path';
 import type { Deps } from './deps';
 import { assessFailover } from './failover';
 import type { Candidate } from './picker';
-import { pickAccount } from './picker';
+import { spilloverPick } from './picker';
+import { prepareRun, runRun } from './run';
 import { pollAccount, refreshAllSnapshots } from './usage';
 import { activate, syncBack } from './vault';
 import type { Config, State } from './types';
@@ -67,10 +68,17 @@ export async function runLaunch(d: Deps, claudeArgs: string[]): Promise<number> 
   if (Object.keys(d.state.accounts).length >= 2) {
     await syncBack(d); // attribute live-slot gauges correctly even after an out-of-band `claude /login`
     await refreshAllSnapshots(d);
-    const pick = pickAccount(candidates(d.state), model, d.cfg, d.now());
+    const pick = spilloverPick(candidates(d.state), d.state.activeAccount, model, d.cfg, d.now());
     if (pick.name !== d.state.activeAccount) {
       if (await otherClaudeRunning()) {
-        console.error(`ccx: another claude session is running — staying on ${d.state.activeAccount} (use \`ccx swap ${pick.name}\` to force the choice)`);
+        // the running session reads the live Keychain slot — never swap under it;
+        // pin the new session via env token instead (ccx run mechanics)
+        const prep = await prepareRun(d, pick.name);
+        if (prep.ok) {
+          console.error(`ccx: ${pick.reason}`);
+          return await runRun(d, [pick.name, ...claudeArgs]);
+        }
+        console.error(`ccx: spillover to ${pick.name} unavailable (${prep.reason}) — staying on ${d.state.activeAccount}`);
       } else {
         const r = await activate(d, pick.name);
         if (!r.ok) console.error(`ccx: ${r.reason}; launching on ${d.state.activeAccount}`);

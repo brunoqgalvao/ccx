@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="https://github.com/brunoqgalvao/ccx/releases"><img src="https://img.shields.io/github/v/release/brunoqgalvao/ccx?color=818cf8" alt="release"/></a>
-  <img src="https://img.shields.io/badge/tests-138%20passing-9ece6a" alt="tests"/>
+  <img src="https://img.shields.io/badge/tests-152%20passing-9ece6a" alt="tests"/>
   <img src="https://img.shields.io/badge/platform-macOS-16161e" alt="macOS"/>
   <img src="https://img.shields.io/badge/runtime-bun-f7768e" alt="bun"/>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-e0af68" alt="MIT"/></a>
@@ -26,8 +26,10 @@ mail, `--continue`, and swear you'll automate this someday.
 Keychain, watches all three rate-limit gauges per account (5h session, weekly,
 model-scoped weekly), and:
 
-- 🚀 **`ccx`** — launches `claude` on whichever account has the most headroom
-  *for the model you're about to use*, and tells you why
+- 🚀 **`ccx`** — sticks with the active account while it's under 75% used,
+  spills new sessions to a cooler account once it isn't (pinned via env token
+  if another session is already running — the Keychain slot is never swapped
+  under a live session), and tells you why
 - 🔁 **swap & resume** — hit a limit mid-session? One `[Y/n]` and the same
   conversation continues on the other account (`claude --continue`, cache-aware:
   if the limit resets in minutes, it tells you to wait instead)
@@ -95,7 +97,7 @@ separate "account names" config entry.
 
 | Command | Description |
 |---|---|
-| `ccx [claude args...]` | Default command. Picks the best account (by effective headroom for the target model), activates it if different from the current live slot, launches `claude` with any passthrough args, and on exit runs sync-back + failover assessment. |
+| `ccx [claude args...]` | Default command. Sticky spillover pick: the active account keeps winning while its binding gauge (for the target model) is under `warningPct`; at `warningPct`+ the session goes to the best account still under the threshold (everyone hot → plain max headroom). A different pick activates via Keychain swap — unless another `claude` is already running, in which case the new session launches **pinned** via env token (`ccx run` mechanics) and the live slot is untouched. On exit: sync-back + failover assessment (Keychain-launched sessions only). |
 | `ccx status [--json]` | Refreshes both accounts' snapshots and prints gauges, severities, reset times, and the active marker. |
 | `ccx run <account> [claude args...]` | **Pinned session.** Launches `claude` with `CLAUDE_CODE_OAUTH_TOKEN` set to `<account>`'s vault token — the live Keychain slot is never touched, so multiple terminals can run different accounts simultaneously. Refreshes the vault token first if it has under `runMinTokenTtlMin` left, and verifies the token's identity before launching (an unverifiable token is refused, because claude silently falls back to the Keychain account otherwise). Pinned sessions bypass the picker, sync-back, and failover offer. |
 | `ccx refresh` | Refreshes every parked vault token that has under `runMinTokenTtlMin` left (the live account is skipped — Claude Code manages that one). Exit 0 when nothing failed; built for a launchd/cron timer. |
@@ -122,7 +124,7 @@ from `src/state.ts`'s `DEFAULT_CONFIG`):
 | `staleAfterMin` | `30` | Minutes. Snapshot age past which the picker/status mark data stale and try a fresh poll before using it. |
 | `tiebreakMargin` | `5` | Percentage points. Headroom difference within which the picker tiebreaks on soonest-reset instead of raw headroom. |
 | `warmModel` | `"haiku"` | Model for `ccx warm`'s window-starting ping — cheap, and never touches the model-scoped pool. |
-| `warningPct` | `75` | Percent usage at/above which a gauge is `warning` severity (statusline-sourced gauges only — the usage endpoint reports its own severity). |
+| `warningPct` | `75` | Percent usage at/above which a gauge is `warning` severity (statusline-sourced gauges only — the usage endpoint reports its own severity). Also the launch spillover threshold: new sessions leave the active account once its binding gauge crosses this. |
 | `criticalPct` | `95` | Percent usage at/above which a gauge is `critical` severity (statusline-sourced gauges only). |
 | `downgradeModel` | `"opus"` | Model passed to `claude --continue --model <this>` when both accounts' scoped (Fable) pools are topped but general quota remains. |
 | `statuslinePassthrough` | `"bun x ccusage statusline"` | Command `ccx statusline` pipes the raw stdin JSON through and renders first, before appending ccx's segment. |
@@ -130,6 +132,7 @@ from `src/state.ts`'s `DEFAULT_CONFIG`):
 | `claudeCodeUaVersion` | `"2.1.199"` | `User-Agent` version string sent to the usage/profile endpoints (they're unofficial and version-sensitive). |
 | `skipPermissions` | `true` | Appends `--dangerously-skip-permissions` to every `claude` spawn (launch, failover resume, `swap -c`, `run`). Set `false` to keep Claude Code's permission prompts. |
 | `runMinTokenTtlMin` | `360` | Minutes. `ccx run` and `ccx refresh` refresh a vault access token when it has less than this long left. |
+| `statuslineBasic` | `true` | Renders the session's own basics (`Fable 5 · ctx 9% · med` — model, context used, effort) ahead of the accounts segment; ctx gets a `!` at 80%+. |
 | `statuslineEta` | `"line2"` | Where reset countdowns render: `"line2"` = dedicated second statusline row (`↻ work 5h 3h2m · wk 2d15h`), `"inline"` = appended per gauge (`5h7%·3h2m`), `"off"` = hidden. |
 | `expiryNudgeMin` | `60` | Minutes. A gauge resetting within this window while unused headroom remains gets the 🔥 use-it-or-lose-it nudge (statusline + `ccx status`). |
 | `expiryNudgeUnusedPct` | `25` | Percentage points of unused quota below which the 🔥 nudge is not worth showing. |

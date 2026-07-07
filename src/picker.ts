@@ -46,6 +46,30 @@ export interface PickResult {
   reason: string;
 }
 
+/** Launch-time pick that avoids piling new sessions onto a hot account:
+ *  below warningPct the active account keeps winning (sticky — no swap churn);
+ *  at warningPct+ the session spills to the best account still under the
+ *  threshold; with nowhere cool to go, plain max-headroom decides. */
+export function spilloverPick(cands: Candidate[], active: string | null, model: string | undefined, cfg: Config, now: Date): PickResult {
+  const activeCand = active ? cands.find((c) => c.name === active) : undefined;
+  if (!activeCand || activeCand.needsLogin) return pickAccount(cands, model, cfg, now);
+  // no snapshot = unknown usage = assume hot (never overstate headroom)
+  const activeUsage = activeCand.snapshot ? 100 - effectiveHeadroom(activeCand.snapshot, model) : 100;
+  if (activeUsage < cfg.warningPct) {
+    return {
+      name: activeCand.name,
+      headroom: 100 - activeUsage,
+      stale: isStale(activeCand.snapshot, cfg, now),
+      reason: `${Math.round(activeUsage)}% used, under the ${cfg.warningPct}% spillover threshold`,
+    };
+  }
+  const cool = cands.filter((c) =>
+    c.name !== active && !c.needsLogin && c.snapshot && 100 - effectiveHeadroom(c.snapshot, model) < cfg.warningPct);
+  if (cool.length === 0) return pickAccount(cands, model, cfg, now);
+  const pick = pickAccount(cool, model, cfg, now);
+  return { ...pick, reason: `spillover — ${active} at ${Math.round(activeUsage)}%; ${pick.reason}` };
+}
+
 export function pickAccount(cands: Candidate[], model: string | undefined, cfg: Config, now: Date): PickResult {
   if (cands.length === 0) throw new Error('pickAccount requires at least one candidate account');
   const usable = cands.filter((c) => !c.needsLogin);

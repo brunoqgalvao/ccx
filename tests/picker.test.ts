@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { bindingGauge, effectiveHeadroom, gaugeApplies, generalHeadroom, isStale, pickAccount } from '../src/picker';
+import { bindingGauge, effectiveHeadroom, gaugeApplies, generalHeadroom, isStale, pickAccount, spilloverPick } from '../src/picker';
 import { DEFAULT_CONFIG } from '../src/state';
 import type { Gauge, Snapshot } from '../src/types';
 
@@ -91,5 +91,56 @@ describe('pickAccount', () => {
   });
   test('throws a clear error on an empty candidate list', () => {
     expect(() => pickAccount([], undefined, DEFAULT_CONFIG, NOW)).toThrow(/at least one/);
+  });
+});
+
+describe('spilloverPick', () => {
+  const cfg = DEFAULT_CONFIG; // warningPct: 75
+  function cands(overrides: Record<string, Partial<{ snapshot: Snapshot; needsLogin: boolean }>>) {
+    return Object.entries(overrides).map(([name, o]) => ({ name, ...o }));
+  }
+  test('active under warningPct stays put even when another account has more headroom', () => {
+    const c = cands({
+      busy: { snapshot: snap([g('session', 60)]) },
+      idle: { snapshot: snap([g('session', 5)]) },
+    });
+    expect(spilloverPick(c, 'busy', undefined, cfg, NOW).name).toBe('busy');
+  });
+  test('active at warningPct+ spills to the best account under the threshold', () => {
+    const c = cands({
+      busy: { snapshot: snap([g('session', 82)]) },
+      alt1: { snapshot: snap([g('session', 50)]) },
+      alt2: { snapshot: snap([g('session', 20)]) },
+    });
+    const pick = spilloverPick(c, 'busy', undefined, cfg, NOW);
+    expect(pick.name).toBe('alt2');
+    expect(pick.reason).toContain('spillover');
+  });
+  test('threshold is the binding gauge for the target model, not just the session gauge', () => {
+    const c = cands({
+      busy: { snapshot: snap([g('session', 10), g('weekly_scoped', 90, { scopeModel: 'Fable' })]) },
+      idle: { snapshot: snap([g('session', 30)]) },
+    });
+    expect(spilloverPick(c, 'busy', 'claude-fable-5', cfg, NOW).name).toBe('idle');
+    expect(spilloverPick(c, 'busy', 'claude-opus-4-8', cfg, NOW).name).toBe('busy');
+  });
+  test('needsLogin and over-threshold alternatives are skipped; all hot falls back to max headroom', () => {
+    const c = cands({
+      busy: { snapshot: snap([g('session', 90)]) },
+      locked: { snapshot: snap([g('session', 5)]), needsLogin: true },
+      warm: { snapshot: snap([g('session', 80)]) },
+    });
+    expect(spilloverPick(c, 'busy', undefined, cfg, NOW).name).toBe('warm'); // fallback: least bad
+  });
+  test('active without a snapshot counts as over threshold', () => {
+    const c = cands({
+      blind: {},
+      idle: { snapshot: snap([g('session', 10)]) },
+    });
+    expect(spilloverPick(c, 'blind', undefined, cfg, NOW).name).toBe('idle');
+  });
+  test('no active account falls back to plain pick', () => {
+    const c = cands({ a: { snapshot: snap([g('session', 10)]) } });
+    expect(spilloverPick(c, null, undefined, cfg, NOW).name).toBe('a');
   });
 });
