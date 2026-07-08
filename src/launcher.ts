@@ -43,8 +43,12 @@ export function withPermissionFlag(args: string[], cfg: Config): string[] {
   return [...args, '--dangerously-skip-permissions'];
 }
 
-export async function spawnClaude(args: string[]): Promise<number> {
-  const p = Bun.spawn(['claude', ...args], { stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
+export async function spawnClaude(args: string[], account?: string): Promise<number> {
+  // CCX_ACCOUNT rides into the session's env so `ccx statusline` (a descendant of this
+  // process) can attribute the session's gauges to the account that actually serves it,
+  // instead of trusting state.activeAccount — which another terminal may have moved.
+  const env = account ? { ...process.env, CCX_ACCOUNT: account } : process.env;
+  const p = Bun.spawn(['claude', ...args], { stdin: 'inherit', stdout: 'inherit', stderr: 'inherit', env });
   return await p.exited;
 }
 
@@ -97,7 +101,7 @@ export async function runLaunch(d: Deps, claudeArgs: string[]): Promise<number> 
     }
   }
 
-  const exitCode = await spawnClaude(withPermissionFlag(claudeArgs, d.cfg));
+  const exitCode = await spawnClaude(withPermissionFlag(claudeArgs, d.cfg), d.state.activeAccount ?? undefined);
   const usedAccount = d.state.activeAccount;
   const sync = await syncBack(d);
   if (!sync.ok) console.error(`ccx: ${sync.reason}`); // 'foreign' needs user action; 'unresolved' self-heals via syncPending
@@ -127,7 +131,7 @@ async function offerFailover(d: Deps, usedName: string, launchModel: string | un
       if (await askYesNo(`ccx: limit hit on ${usedName}. ${action.reason}. Swap and resume the conversation?`)) {
         if (await otherClaudeRunning()) { console.error('ccx: another claude session is running — not swapping (spec §4 guard). Use `ccx swap --force -c` after it exits.'); return; }
         const r = await activate(d, action.to);
-        if (r.ok) await spawnClaude(withPermissionFlag(['--continue'], d.cfg));
+        if (r.ok) await spawnClaude(withPermissionFlag(['--continue'], d.cfg), action.to);
         else console.error(`ccx: ${r.reason}`);
       }
       return;
@@ -144,7 +148,7 @@ async function offerFailover(d: Deps, usedName: string, launchModel: string | un
           const r = await activate(d, action.on);
           if (!r.ok) { console.error(`ccx: ${r.reason}`); return; }
         }
-        await spawnClaude(withPermissionFlag(['--continue', '--model', d.cfg.downgradeModel], d.cfg));
+        await spawnClaude(withPermissionFlag(['--continue', '--model', d.cfg.downgradeModel], d.cfg), action.on);
       }
       return;
     }
@@ -165,6 +169,6 @@ export async function runSwap(d: Deps, args: string[]): Promise<number> {
   const r = await activate(d, name);
   if (!r.ok) { console.error(`ccx: ${r.reason}`); return 1; }
   console.error(`ccx: active account is now ${name}`);
-  if (wantContinue) return await spawnClaude(withPermissionFlag(['--continue'], d.cfg));
+  if (wantContinue) return await spawnClaude(withPermissionFlag(['--continue'], d.cfg), name);
   return 0;
 }

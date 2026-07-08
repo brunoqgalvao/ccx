@@ -151,7 +151,10 @@ trip. There is no automatic Keychain-enumeration rebuild in the MVP.
 
 `ccx run <account>` sidesteps the single-live-slot model entirely: the session's
 account is baked in at launch via `CLAUDE_CODE_OAUTH_TOKEN` and never reads the
-Keychain again. Run `ccx run work` in one terminal and `ccx run personal` in
+Keychain again. Every ccx-launched session (pinned or not) also carries
+`CCX_ACCOUNT` in its env, so `ccx statusline` attributes that session's gauges
+to the account actually serving it — not to whatever account happens to be
+active when the statusline fires. Run `ccx run work` in one terminal and `ccx run personal` in
 another — "swapping" one of them is just exiting it and relaunching with
 `ccx run <other> -- --continue`; the other terminal never notices, and the
 concurrency guard doesn't apply.
