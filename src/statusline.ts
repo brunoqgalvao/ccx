@@ -151,6 +151,16 @@ async function runPassthrough(cmd: string, raw: string): Promise<string> {
   }
 }
 
+/** Which account a statusline invocation's gauges belong to. Sessions launched by ccx
+ *  carry CCX_ACCOUNT in env (statusline runs as a descendant of that session) — pinned
+ *  sessions in particular are usually NOT the active account, and a session that
+ *  outlives a swap/import keeps serving its original account while activeAccount moves.
+ *  Only a bare `claude` (no env marker) is safely attributed to the active slot. */
+export function resolveStatuslineAccount(state: State, envAccount: string | undefined): string | undefined {
+  if (envAccount && state.accounts[envAccount]) return envAccount;
+  return state.activeAccount ?? undefined;
+}
+
 export async function runStatusline(d: Deps): Promise<void> {
   const raw = await Bun.stdin.text();
   teeRaw(raw, d.cfg.statuslineTeePath);
@@ -158,21 +168,24 @@ export async function runStatusline(d: Deps): Promise<void> {
   let input: unknown = null;
   try { input = JSON.parse(raw); } catch { /* render-only mode */ }
 
+  const sessionAccount = resolveStatuslineAccount(d.state, process.env.CCX_ACCOUNT);
   if (input) {
     try {
-      const active = d.state.activeAccount ? d.state.accounts[d.state.activeAccount] : undefined;
-      if (active) {
+      const owner = sessionAccount ? d.state.accounts[sessionAccount] : undefined;
+      if (owner) {
         const parsed = parseStatusline(input, d.cfg);
         if (parsed.gauges.length > 0) {
-          active.snapshot = mergeStatusline(active.snapshot, parsed, d.now());
+          owner.snapshot = mergeStatusline(owner.snapshot, parsed, d.now());
         }
         d.saveState(d.state);
       }
-      // parked accounts: sparse, BOUNDED polling — abandoned work is safe because
-      // pollAccount pins lastPoll before any network call (no herd, no re-spam)
+      // other accounts: sparse, BOUNDED polling — abandoned work is safe because
+      // pollAccount pins lastPoll before any network call (no herd, no re-spam).
+      // Skip the session's own account (statusline-fed), not the active slot: for a
+      // pinned session they differ, and its own account's data is already fresh here.
       const pollPhase = (async () => {
         for (const name of Object.keys(d.state.accounts)) {
-          if (name !== d.state.activeAccount) await pollAccount(d, name);
+          if (name !== sessionAccount) await pollAccount(d, name);
         }
       })();
       pollPhase.catch(() => {}); // an abandoned phase's late rejection must never kill the render

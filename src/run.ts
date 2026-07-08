@@ -50,10 +50,13 @@ export async function prepareRun(d: Deps, name: string): Promise<RunPrep> {
   return { ok: true, token: tokens.accessToken, expiresAt: tokens.expiresAt, warnings };
 }
 
-export async function spawnClaudePinned(args: string[], token: string): Promise<number> {
+export async function spawnClaudePinned(args: string[], token: string, account?: string): Promise<number> {
+  // CCX_ACCOUNT lets `ccx statusline` attribute this session's gauges to the pinned
+  // account — a pinned session normally runs on a NON-active account, so merging its
+  // statusline into state.activeAccount cross-contaminates both snapshots.
   const p = Bun.spawn(['claude', ...args], {
     stdin: 'inherit', stdout: 'inherit', stderr: 'inherit',
-    env: { ...process.env, CLAUDE_CODE_OAUTH_TOKEN: token },
+    env: { ...process.env, CLAUDE_CODE_OAUTH_TOKEN: token, ...(account ? { CCX_ACCOUNT: account } : {}) },
   });
   return await p.exited;
 }
@@ -83,7 +86,7 @@ export async function runRun(
     console.error(resumed
       ? `ccx: token refreshed — resuming pinned session on ${name}`
       : `ccx: pinned session on ${name} (${d.state.accounts[name].email}) — live Keychain slot untouched`);
-    const code = await spawn(withPermissionFlag(args, d.cfg), prep.token);
+    const code = await spawn(withPermissionFlag(args, d.cfg), prep.token, name);
     if (!shouldResume(d.now(), prep.expiresAt, args, isTTY())) return code;
     args = ['--continue'];
     resumed = true;

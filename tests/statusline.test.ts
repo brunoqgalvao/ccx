@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { buildBasicSegment, buildEtaLine, buildSegment, composeFirstLine, fmtEta } from '../src/statusline';
+import { buildBasicSegment, buildEtaLine, buildSegment, composeFirstLine, fmtEta, resolveStatuslineAccount } from '../src/statusline';
 import type { Gauge } from '../src/types';
 import { fakeDeps } from './fakes';
 
@@ -192,5 +192,28 @@ describe('statuslineEta modes', () => {
     const d = twoAccounts();
     delete d.state.accounts.work;
     expect(buildEtaLine(d.state, d.cfg, NOW)).toBe('');
+  });
+});
+
+describe('resolveStatuslineAccount', () => {
+  const state = (over: Partial<ReturnType<typeof fakeDeps>['state']> = {}) => {
+    const d = fakeDeps();
+    d.state.activeAccount = 'personal';
+    d.state.accounts.personal = { accountUuid: 'u1', email: 'e1' };
+    d.state.accounts.work = { accountUuid: 'u2', email: 'e2' };
+    Object.assign(d.state, over);
+    return d.state;
+  };
+  test('CCX_ACCOUNT wins over the active slot (pinned session on a parked account)', () => {
+    expect(resolveStatuslineAccount(state(), 'work')).toBe('work');
+  });
+  test('bare claude (no env marker) attributes to the active slot', () => {
+    expect(resolveStatuslineAccount(state(), undefined)).toBe('personal');
+  });
+  test('unknown env account falls back to the active slot instead of inventing an entry', () => {
+    expect(resolveStatuslineAccount(state(), 'ghost')).toBe('personal');
+  });
+  test('no active account and no env marker: undefined (merge is skipped)', () => {
+    expect(resolveStatuslineAccount(state({ activeAccount: null }), undefined)).toBeUndefined();
   });
 });
