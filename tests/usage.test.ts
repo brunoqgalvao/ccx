@@ -7,7 +7,7 @@ import { pollAccount, refreshAllSnapshots } from '../src/usage';
 import { blob, fakeApi, fakeDeps, fakeKeychain } from './fakes';
 
 const NOW = new Date('2026-07-03T18:00:00Z');
-const GAUGES = () => parseUsageResponse(usageFixture, NOW);
+const GAUGES = () => parseUsageResponse(usageFixture);
 const okUsage = () => ({ ok: true as const, gauges: GAUGES() });
 
 async function twoAccountDeps() {

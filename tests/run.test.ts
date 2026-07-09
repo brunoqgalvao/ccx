@@ -169,6 +169,15 @@ describe('needsWarm', () => {
   test('running window does not', () => {
     expect(needsWarm(acct(new Date(NOW + 3600_000).toISOString()), new Date(NOW))).toBe(false);
   });
+  test('null resetsAt (window never started) → warm', () => {
+    const account = {
+      accountUuid: 'u', email: 'e', needsLogin: false,
+      snapshot: { fetchedAt: new Date(NOW).toISOString(), source: 'poll' as const, gauges: [
+        { kind: 'session' as const, percent: 0, severity: 'normal' as const, resetsAt: null, scopeModel: null, isActive: false },
+      ] },
+    };
+    expect(needsWarm(account, new Date(NOW))).toBe(true);
+  });
   test('no snapshot at all → warm (window definitely not running)', () => {
     expect(needsWarm(acct(null), new Date(NOW))).toBe(true);
   });

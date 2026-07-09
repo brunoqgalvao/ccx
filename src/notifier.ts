@@ -25,7 +25,7 @@ export function checkAndNotify(d: Deps): void {
           const scope = gauge.scopeModel ? ` (${gauge.scopeModel})` : '';
           pending.push({
             title: `ccx: ${name} ${gauge.severity}`,
-            message: `${GAUGE_NAME[gauge.kind]}${scope} at ${Math.round(gauge.percent)}%, resets ${new Date(gauge.resetsAt).toLocaleTimeString()}`,
+            message: `${GAUGE_NAME[gauge.kind]}${scope} at ${Math.round(gauge.percent)}%${gauge.resetsAt ? `, resets ${new Date(gauge.resetsAt).toLocaleTimeString()}` : ''}`,
           });
           d.state.notifier.lastNotified[key] = now.toISOString();
           d.state.notifier.lastNotifiedSeverity[key] = gauge.severity;

@@ -18,6 +18,12 @@ function withSnapshot(gauges: Gauge[]) {
 }
 
 describe('checkAndNotify', () => {
+  test('null resetsAt omits the reset time instead of showing the epoch', () => {
+    const d = withSnapshot([{ ...g('weekly_scoped', 80, 'warning'), resetsAt: null }]);
+    checkAndNotify(d);
+    expect(d.notifications).toHaveLength(1);
+    expect(d.notifications[0]).not.toContain('resets');
+  });
   test('notifies on upward severity transition', () => {
     const d = withSnapshot([g('weekly_scoped', 75, 'warning')]);
     checkAndNotify(d);

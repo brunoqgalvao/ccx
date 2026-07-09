@@ -5,7 +5,7 @@ export interface Gauge {
   kind: GaugeKind;
   percent: number;
   severity: Severity;
-  resetsAt: string;            // ISO 8601
+  resetsAt: string | null;     // ISO 8601; null = window not started yet (API sends resets_at: null)
   scopeModel: string | null;   // e.g. "Fable" for weekly_scoped
   isActive: boolean;
 }

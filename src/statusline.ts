@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import type { Deps } from './deps';
 import { checkAndNotify } from './notifier';
 import { isStale } from './picker';
-import { mergeStatusline, parseStatusline } from './snapshots';
+import { mergeStatusline, parseStatusline, resetEpoch } from './snapshots';
 import { pollAccount } from './usage';
 import type { Config, Gauge, State } from './types';
 
@@ -29,7 +29,7 @@ export function fmtEta(msLeft: number): string {
 
 /** Quota is use-it-or-lose-it: flag a gauge whose reset is imminent while plenty is unused. */
 export function expiringUnused(gauge: Gauge, cfg: Config, now: Date): boolean {
-  const msLeft = Date.parse(gauge.resetsAt) - now.getTime();
+  const msLeft = resetEpoch(gauge) - now.getTime();
   return msLeft > 0 && msLeft <= cfg.expiryNudgeMin * 60_000 && 100 - gauge.percent >= cfg.expiryNudgeUnusedPct;
 }
 
@@ -89,7 +89,7 @@ export function buildSegment(state: State, cfg: Config, now: Date): string {
       .sort((a, b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind))
       .map((gauge) => {
         const eta = cfg.statuslineEta === 'inline' && gauge.kind !== 'weekly_scoped' // F resets with wk — don't repeat it
-          ? fmtEta(Date.parse(gauge.resetsAt) - now.getTime())
+          ? fmtEta(resetEpoch(gauge) - now.getTime())
           : '';
         const nudge = expiringUnused(gauge, cfg, now) ? '🔥' : '';
         return `${GAUGE_LABEL[gauge.kind]}${Math.round(gauge.percent)}%${eta ? `·${eta}` : ''}${nudge}${severityMark(gauge)}`;
@@ -109,7 +109,7 @@ export function buildEtaLine(state: State, cfg: Config, now: Date): string {
       const etas = (account.snapshot?.gauges ?? [])
         .filter((gauge) => gauge.kind !== 'weekly_scoped') // F resets with wk
         .sort((a, b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind))
-        .map((gauge) => ({ label: GAUGE_LABEL[gauge.kind], eta: fmtEta(Date.parse(gauge.resetsAt) - now.getTime()) }))
+        .map((gauge) => ({ label: GAUGE_LABEL[gauge.kind], eta: fmtEta(resetEpoch(gauge) - now.getTime()) }))
         .filter((e) => e.eta !== '')
         .map((e) => `${e.label} ${e.eta}`);
       return etas.length > 0 ? `${name} ${etas.join(' · ')}` : null;

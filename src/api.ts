@@ -29,7 +29,7 @@ export function realApi(cfg: Config, fetchFn: typeof fetch = fetch, now: () => D
       try {
         const r = await fetchFn(USAGE_URL, { headers: authHeaders(token), signal: AbortSignal.timeout(10_000) });
         if (!r.ok) return { ok: false, status: r.status };
-        return { ok: true, gauges: parseUsageResponse(await r.json(), now()) };
+        return { ok: true, gauges: parseUsageResponse(await r.json()) };
       } catch {
         return { ok: false, status: 0 };
       }

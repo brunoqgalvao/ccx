@@ -8,7 +8,7 @@ const NOW = new Date('2026-07-03T18:00:00Z');
 
 describe('parseUsageResponse', () => {
   test('maps all three gauge kinds from the limits array', () => {
-    const gauges = parseUsageResponse(usageFixture, NOW);
+    const gauges = parseUsageResponse(usageFixture);
     expect(gauges).toHaveLength(3);
     const scoped = gauges.find((g) => g.kind === 'weekly_scoped')!;
     expect(scoped.percent).toBe(75);
@@ -16,10 +16,18 @@ describe('parseUsageResponse', () => {
     expect(scoped.scopeModel).toBe('Fable');
     expect(scoped.isActive).toBe(true);
   });
+  test('keeps resets_at null for a not-yet-started window (no fabricated timestamp)', () => {
+    const gauges = parseUsageResponse({ limits: [{
+      kind: 'weekly_scoped', group: 'weekly', percent: 0, severity: 'normal',
+      resets_at: null, scope: { model: { id: null, display_name: 'Fable' }, surface: null }, is_active: false,
+    }] });
+    expect(gauges).toHaveLength(1);
+    expect(gauges[0].resetsAt).toBeNull();
+  });
   test('tolerates unknown kinds and missing limits array', () => {
-    expect(parseUsageResponse({ limits: [{ kind: 'martian', percent: 1 }] }, NOW)).toHaveLength(0);
-    expect(parseUsageResponse({}, NOW)).toHaveLength(0);
-    expect(parseUsageResponse(null, NOW)).toHaveLength(0);
+    expect(parseUsageResponse({ limits: [{ kind: "martian", percent: 1 }] })).toHaveLength(0);
+    expect(parseUsageResponse({})).toHaveLength(0);
+    expect(parseUsageResponse(null)).toHaveLength(0);
   });
 });
 
@@ -41,19 +49,19 @@ describe('parseStatusline', () => {
   test('returns no gauges when rate_limits is absent', () => {
     expect(parseStatusline({ model: { id: 'x' } }, DEFAULT_CONFIG).gauges).toHaveLength(0);
   });
-  test('malformed resets_at does not throw (falls back to epoch)', () => {
+  test('malformed resets_at does not throw (falls back to null, not a fabricated epoch)', () => {
     const { gauges } = parseStatusline(
       { rate_limits: { five_hour: { used_percentage: 10, resets_at: 'soon' } } },
       DEFAULT_CONFIG,
     );
     expect(gauges).toHaveLength(1);
-    expect(gauges[0].resetsAt).toBe(new Date(0).toISOString());
+    expect(gauges[0].resetsAt).toBeNull();
   });
 });
 
 describe('mergeStatusline', () => {
   test('replaces session/weekly_all but preserves scoped gauges from previous poll', () => {
-    const prevGauges = parseUsageResponse(usageFixture, NOW);
+    const prevGauges = parseUsageResponse(usageFixture);
     const prev = { fetchedAt: '2026-07-03T17:00:00Z', source: 'poll' as const, gauges: prevGauges };
     const parsed = parseStatusline(statuslineFixture, DEFAULT_CONFIG);
     const merged = mergeStatusline(prev, parsed, NOW);
@@ -67,7 +75,7 @@ describe('mergeStatusline', () => {
     expect(merged.gauges).toHaveLength(2);
   });
   test('empty statusline parse never wipes or fresh-stamps an existing snapshot', () => {
-    const prev = { fetchedAt: '2026-07-03T17:00:00Z', source: 'poll' as const, gauges: parseUsageResponse(usageFixture, NOW) };
+    const prev = { fetchedAt: '2026-07-03T17:00:00Z', source: 'poll' as const, gauges: parseUsageResponse(usageFixture) };
     expect(mergeStatusline(prev, { model: 'x', gauges: [] }, NOW)).toBe(prev);
   });
 });

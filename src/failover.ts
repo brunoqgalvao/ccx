@@ -1,10 +1,11 @@
 import type { Candidate } from './picker';
 import { bindingGauge, effectiveHeadroom, gaugeApplies, generalHeadroom } from './picker';
+import { resetEpoch } from './snapshots';
 import type { Config, Gauge } from './types';
 
 export type FailoverAction =
   | { action: 'none' }
-  | { action: 'wait'; resetsAt: string; reason: string }
+  | { action: 'wait'; resetsAt: string | null; reason: string }
   | { action: 'switch'; to: string; reason: string }
   | { action: 'downgrade'; on: string; reason: string };
 
@@ -28,11 +29,11 @@ export function assessFailover(args: {
 
   // Cache-aware wait applies only when EVERY hit gauge resets within the threshold —
   // waiting out one gauge while another stays blocked for hours brings no relief.
-  const allParseable = hits.every((gauge) => Number.isFinite(Date.parse(gauge.resetsAt)));
+  const allParseable = hits.every((gauge) => Number.isFinite(resetEpoch(gauge)));
   const lastHit = allParseable
-    ? hits.reduce((a, b) => (Date.parse(a.resetsAt) >= Date.parse(b.resetsAt) ? a : b))
+    ? hits.reduce((a, b) => (resetEpoch(a) >= resetEpoch(b) ? a : b))
     : null; // unknown reset time → don't gamble on waiting; fall through to switch
-  if (lastHit && Date.parse(lastHit.resetsAt) - now.getTime() <= cfg.switchMinResetWaitMin * 60_000) {
+  if (lastHit && resetEpoch(lastHit) - now.getTime() <= cfg.switchMinResetWaitMin * 60_000) {
     return {
       action: 'wait',
       resetsAt: lastHit.resetsAt,
@@ -74,8 +75,8 @@ export function assessFailover(args: {
     ...targets
       .map((o) => bindingGauge(o.snapshot!, model))
       .filter((gauge): gauge is NonNullable<typeof gauge> => !!gauge),
-  ].filter((gauge) => Number.isFinite(Date.parse(gauge.resetsAt)));
-  const soonest = reliefGauges.sort((a, b) => Date.parse(a.resetsAt) - Date.parse(b.resetsAt))[0] ?? binding;
+  ].filter((gauge) => Number.isFinite(resetEpoch(gauge)));
+  const soonest = reliefGauges.sort((a, b) => resetEpoch(a) - resetEpoch(b))[0] ?? binding;
   return {
     action: 'wait',
     resetsAt: soonest.resetsAt,

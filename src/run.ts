@@ -117,6 +117,7 @@ export function needsWarm(account: AccountState, now: Date): boolean {
   if (account.needsLogin) return false;
   const session = account.snapshot?.gauges.find((g) => g.kind === 'session');
   if (!session) return true; // no data = window certainly not running
+  if (session.resetsAt === null) return true; // API says the window never started
   return Date.parse(session.resetsAt) <= now.getTime();
 }
 

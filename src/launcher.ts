@@ -121,7 +121,7 @@ async function offerFailover(d: Deps, usedName: string, launchModel: string | un
     case 'none':
       return;
     case 'wait':
-      console.error(`ccx: limit hit on ${usedName}; ${action.reason}. Resets ${new Date(action.resetsAt).toLocaleString()}.`);
+      console.error(`ccx: limit hit on ${usedName}; ${action.reason}.${action.resetsAt ? ` Resets ${new Date(action.resetsAt).toLocaleString()}.` : ''}`);
       return;
     case 'switch': {
       if (!process.stdin.isTTY) {

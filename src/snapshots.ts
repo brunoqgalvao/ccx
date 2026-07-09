@@ -1,6 +1,11 @@
 import type { Config, Gauge, Severity, Snapshot } from './types';
 
 const KINDS = new Set(['session', 'weekly_all', 'weekly_scoped']);
+
+/** Epoch ms of a gauge's reset, NaN when unknown or the window hasn't started. */
+export function resetEpoch(gauge: Pick<Gauge, 'resetsAt'>): number {
+  return gauge.resetsAt === null ? NaN : Date.parse(gauge.resetsAt);
+}
 const SEVERITIES = new Set(['normal', 'warning', 'critical']);
 
 export function deriveSeverity(pct: number, cfg: Config): Severity {
@@ -9,7 +14,7 @@ export function deriveSeverity(pct: number, cfg: Config): Severity {
   return 'normal';
 }
 
-export function parseUsageResponse(body: unknown, now: Date): Gauge[] {
+export function parseUsageResponse(body: unknown): Gauge[] {
   const limits = (body as any)?.limits;
   if (!Array.isArray(limits)) return [];
   return limits
@@ -18,7 +23,7 @@ export function parseUsageResponse(body: unknown, now: Date): Gauge[] {
       kind: l.kind,
       percent: typeof l.percent === 'number' ? l.percent : 0,
       severity: SEVERITIES.has(l.severity) ? l.severity : 'normal',
-      resetsAt: typeof l.resets_at === 'string' ? l.resets_at : now.toISOString(),
+      resetsAt: typeof l.resets_at === 'string' ? l.resets_at : null,
       scopeModel: l.scope?.model?.display_name ?? null,
       isActive: l.is_active === true,
     }));
@@ -33,7 +38,7 @@ export function parseStatusline(body: unknown, cfg: Config): { model?: string; g
       kind,
       percent: entry.used_percentage,
       severity: deriveSeverity(entry.used_percentage, cfg),
-      resetsAt: new Date(typeof entry.resets_at === 'number' ? entry.resets_at * 1000 : 0).toISOString(),
+      resetsAt: typeof entry.resets_at === 'number' ? new Date(entry.resets_at * 1000).toISOString() : null,
       scopeModel: null,
       isActive: entry.used_percentage >= 100,
     });

@@ -1,6 +1,7 @@
 import type { Deps } from './deps';
 import { checkAndNotify } from './notifier';
 import { isStale } from './picker';
+import { resetEpoch } from './snapshots';
 import { expiringUnused, fmtEta } from './statusline';
 import { refreshAllSnapshots } from './usage';
 
@@ -22,10 +23,10 @@ export async function runStatus(d: Deps, args: string[]): Promise<number> {
     if (!account.snapshot) { console.log('   no data yet'); continue; }
     for (const gauge of account.snapshot.gauges) {
       const scope = gauge.scopeModel ? ` [${gauge.scopeModel}]` : '';
-      const resets = new Date(gauge.resetsAt).toLocaleString();
-      console.log(`   ${gauge.kind}${scope}: ${Math.round(gauge.percent)}% (${gauge.severity}) resets ${resets}`);
+      const resets = gauge.resetsAt === null ? 'window not started' : `resets ${new Date(gauge.resetsAt).toLocaleString()}`;
+      console.log(`   ${gauge.kind}${scope}: ${Math.round(gauge.percent)}% (${gauge.severity}) ${resets}`);
       if (expiringUnused(gauge, d.cfg, d.now())) {
-        console.log(`   🔥 ${gauge.kind}${scope} resets in ${fmtEta(Date.parse(gauge.resetsAt) - d.now().getTime())} with ${Math.round(100 - gauge.percent)}% unused — use it or lose it`);
+        console.log(`   🔥 ${gauge.kind}${scope} resets in ${fmtEta(resetEpoch(gauge) - d.now().getTime())} with ${Math.round(100 - gauge.percent)}% unused — use it or lose it`);
       }
     }
     const age = Math.round((d.now().getTime() - Date.parse(account.snapshot.fetchedAt)) / 60_000);

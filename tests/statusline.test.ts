@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { buildBasicSegment, buildEtaLine, buildSegment, composeFirstLine, fmtEta, resolveStatuslineAccount } from '../src/statusline';
+import { buildBasicSegment, buildEtaLine, buildSegment, composeFirstLine, expiringUnused, fmtEta, resolveStatuslineAccount } from '../src/statusline';
 import type { Gauge } from '../src/types';
 import { fakeDeps } from './fakes';
 
@@ -150,6 +150,21 @@ describe('use-it-or-lose-it nudge', () => {
     };
     d.cfg.statuslineEta = 'inline';
     expect(buildSegment(d.state, d.cfg, NOW)).toBe('a 5h90%·40m! wk8%·5h');
+  });
+});
+
+describe('null resetsAt (window not started)', () => {
+  test('never nudges and renders without an eta or crash', () => {
+    const d = fakeDeps();
+    const gauge: Gauge = { kind: 'weekly_scoped', percent: 0, severity: 'normal', resetsAt: null, scopeModel: 'Fable', isActive: false };
+    expect(expiringUnused(gauge, d.cfg, NOW)).toBe(false);
+    d.state.accounts.a = {
+      accountUuid: 'u', email: 'e',
+      snapshot: { fetchedAt: NOW.toISOString(), source: 'poll', gauges: [gauge] },
+    };
+    d.cfg.statuslineEta = 'inline';
+    expect(buildSegment(d.state, d.cfg, NOW)).toBe('a F0%');
+    expect(buildEtaLine(d.state, d.cfg, NOW)).toBe('');
   });
 });
 
