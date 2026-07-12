@@ -23,7 +23,8 @@ export async function runStatus(d: Deps, args: string[]): Promise<number> {
     if (!account.snapshot) { console.log('   no data yet'); continue; }
     for (const gauge of account.snapshot.gauges) {
       const scope = gauge.scopeModel ? ` [${gauge.scopeModel}]` : '';
-      const resets = gauge.resetsAt === null ? 'window not started' : `resets ${new Date(gauge.resetsAt).toLocaleString()}`;
+      const eta = gauge.resetsAt === null ? '' : fmtEta(resetEpoch(gauge) - d.now().getTime());
+      const resets = gauge.resetsAt === null ? 'window not started' : `resets ${new Date(gauge.resetsAt).toLocaleString()}${eta ? ` (in ${eta})` : ''}`;
       console.log(`   ${gauge.kind}${scope}: ${Math.round(gauge.percent)}% (${gauge.severity}) ${resets}`);
       if (expiringUnused(gauge, d.cfg, d.now())) {
         console.log(`   🔥 ${gauge.kind}${scope} resets in ${fmtEta(resetEpoch(gauge) - d.now().getTime())} with ${Math.round(100 - gauge.percent)}% unused — use it or lose it`);

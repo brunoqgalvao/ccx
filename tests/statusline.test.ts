@@ -36,6 +36,22 @@ describe('buildSegment', () => {
     const seg = buildSegment(d.state, d.cfg, NOW);
     expect(seg).toBe('a 5h5%·1d? │ b ⚠login');
   });
+  test('pinned session marks its own account with 📌 while ⚡ stays on the live slot', () => {
+    const d = fakeDeps();
+    d.state.activeAccount = 'personal';
+    d.state.accounts.personal = {
+      accountUuid: 'u1', email: 'e1',
+      snapshot: { fetchedAt: NOW.toISOString(), source: 'statusline', gauges: [g('session', 23)] },
+    };
+    d.state.accounts.work = {
+      accountUuid: 'u2', email: 'e2',
+      snapshot: { fetchedAt: NOW.toISOString(), source: 'poll', gauges: [g('session', 4)] },
+    };
+    d.cfg.statuslineEta = 'inline';
+    expect(buildSegment(d.state, d.cfg, NOW, 'work')).toBe('⚡personal 5h23%·1d │ 📌work 5h4%·1d');
+    expect(buildSegment(d.state, d.cfg, NOW, 'personal')).toBe('⚡📌personal 5h23%·1d │ work 5h4%·1d');
+    expect(buildSegment(d.state, d.cfg, NOW)).toBe('⚡personal 5h23%·1d │ work 5h4%·1d');
+  });
   test('critical gauge gets ✗ mark', () => {
     const d = fakeDeps();
     d.state.accounts.a = {

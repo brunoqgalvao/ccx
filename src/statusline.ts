@@ -80,9 +80,11 @@ export function composeFirstLine(passthrough: string, basic: string, accounts: s
   return [passthrough, tail].filter((s) => s !== '').join(' ');
 }
 
-export function buildSegment(state: State, cfg: Config, now: Date): string {
+export function buildSegment(state: State, cfg: Config, now: Date, pinnedAccount?: string): string {
   const parts = Object.entries(state.accounts).map(([name, account]) => {
-    const marker = state.activeAccount === name ? '⚡' : '';
+    // ⚡ = live Keychain slot; 📌 = the account THIS session is pinned to (ccx run) —
+    // without it, a pinned session's statusline points the reader at the wrong account.
+    const marker = `${state.activeAccount === name ? '⚡' : ''}${pinnedAccount === name ? '📌' : ''}`;
     if (account.needsLogin) return `${marker}${name} ⚠login`;
     if (!account.snapshot || account.snapshot.gauges.length === 0) return `${marker}${name} —`;
     const gauges = [...account.snapshot.gauges]
@@ -168,7 +170,9 @@ export async function runStatusline(d: Deps): Promise<void> {
   let input: unknown = null;
   try { input = JSON.parse(raw); } catch { /* render-only mode */ }
 
-  const sessionAccount = resolveStatuslineAccount(d.state, process.env.CCX_ACCOUNT);
+  const envAccount = process.env.CCX_ACCOUNT;
+  const pinnedAccount = envAccount && d.state.accounts[envAccount] ? envAccount : undefined;
+  const sessionAccount = resolveStatuslineAccount(d.state, envAccount);
   if (input) {
     try {
       const owner = sessionAccount ? d.state.accounts[sessionAccount] : undefined;
@@ -198,7 +202,7 @@ export async function runStatusline(d: Deps): Promise<void> {
 
   const rendered = await runPassthrough(d.cfg.statuslinePassthrough, raw);
   const basic = buildBasicSegment(input, d.cfg);
-  const segment = buildSegment(d.state, d.cfg, d.now());
+  const segment = buildSegment(d.state, d.cfg, d.now(), pinnedAccount);
   console.log(composeFirstLine(rendered, basic, segment));
   const etaLine = buildEtaLine(d.state, d.cfg, d.now());
   if (etaLine) console.log(etaLine);

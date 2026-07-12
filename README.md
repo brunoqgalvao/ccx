@@ -154,7 +154,9 @@ account is baked in at launch via `CLAUDE_CODE_OAUTH_TOKEN` and never reads the
 Keychain again. Every ccx-launched session (pinned or not) also carries
 `CCX_ACCOUNT` in its env, so `ccx statusline` attributes that session's gauges
 to the account actually serving it — not to whatever account happens to be
-active when the statusline fires. Run `ccx run work` in one terminal and `ccx run personal` in
+active when the statusline fires — and marks that account with `📌` in the
+statusline segment (the `⚡` active marker stays on the live Keychain slot,
+which is usually a *different* account). Run `ccx run work` in one terminal and `ccx run personal` in
 another — "swapping" one of them is just exiting it and relaunching with
 `ccx run <other> -- --continue`; the other terminal never notices, and the
 concurrency guard doesn't apply.
@@ -213,7 +215,9 @@ Segment anatomy:
 ↻ meistrari 5h 3h2m · wk 2d15h │ pqg wk 6h22m
 ```
 
-`⚡` marks the active account; each gauge shows percent used, `!` warning /
+`⚡` marks the active (live Keychain) account; `📌` marks the account THIS
+session is pinned to (only inside `ccx run` sessions — the two usually differ,
+since pinned sessions typically run on a parked account); each gauge shows percent used, `!` warning /
 `✗` critical-or-active-limit, `?` stale data, and 🔥 when the window resets
 soon with plenty unused — quota doesn't roll over, so burn it. The `↻` second
 row shows time-to-reset per running window (a window that hasn't started —
