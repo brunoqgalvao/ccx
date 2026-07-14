@@ -20,8 +20,13 @@ quota and lets the user redirect the launch with one keystroke.
 New pure function in `picker.ts`:
 
 ```ts
-expiryHint(cands, pickedName, model, cfg, now): { name, gauge } | null
+expiryHint(cands, pickedName, model, mutedUntil, cfg, now): { name, gauge } | null
 ```
+
+(`mutedUntil: Record<string, string>` is the state's mute map — it must be
+inside the function, not filtered by the caller: if the soonest-reset
+account is muted, the hint falls to the next qualifying account rather
+than disappearing.)
 
 An account qualifies when ALL hold:
 
@@ -30,10 +35,10 @@ An account qualifies when ALL hold:
    `session`) that applies to the target model (`gaugeApplies`) with
    `0 < resetEpoch − now ≤ expiryNudgeMin` and unused
    `≥ expiryNudgeUnusedPct`.
-3. Usability floor: `effectiveHeadroom(snapshot, model) ≥ 100 −
-   criticalPct` — an account with any applicable gauge ≥ 95% is not
-   suggested (mirrors `assessFailover`'s `minUsable`; don't steer a launch
-   into an immediate limit hit).
+3. Usability floor: `effectiveHeadroom(snapshot, model) > 100 −
+   criticalPct` (strict, matching `assessFailover`'s `headroom > minUsable`)
+   — an account with any applicable gauge ≥ 95% is not suggested; don't
+   steer a launch into an immediate limit hit.
 4. Not muted (see decline memory).
 
 Suppression: no hint at all when the **picked** account itself has an
@@ -52,7 +57,14 @@ that account's qualifying gauge with the most unused percentage points.
   `runRun` pinning when another claude is running). Decline → original pick
   proceeds.
 - Non-TTY / `-p`: print the hint plus the copy-paste command
-  (`ccx run meistrari`); no prompt; proceed with the pick.
+  (`ccx run meistrari`); no prompt; proceed with the pick. Two independent
+  checks: `process.stdin.isTTY` AND `claudeArgs` containing `-p`/`--print`
+  (with `-p` stdin can still be a TTY, and a prompt would block scripted
+  use). The branch must happen BEFORE calling `askYesNo` — its silent
+  non-TTY `false` would otherwise register as a decline and write a mute.
+- Accept-path prep failure (another claude running, `prepareRun` for the
+  hint account fails): fall back to the original pick with a stderr notice,
+  exactly as spillover already does (launcher.ts:85).
 - `ccx run <account>` explicit launches never hint — the user already chose.
 - `--continue`/`--resume` launches still hint: accepting rebuilds prompt
   cache on the hint account, which burns the expiring quota — the point.
@@ -73,7 +85,9 @@ sessions onto the expiring account is desirable.
 - `expiringUnused()` (statusline.ts) gains the weekly-only restriction:
   without it, raising the horizon to 180 makes 🔥 fire during the last 3h
   of EVERY 5h session window (~60% of the time) — pure noise. Weekly
-  windows are in their final 3h only ~1.8% of the week.
+  windows are in their final 3h only ~1.8% of the week. Note: `ccx status`
+  (status.ts:29) also calls `expiringUnused`, so its session-gauge 🔥 lines
+  disappear too — intended, same noise argument; not a test regression.
 - `expiryNudgeUnusedPct: 25` unchanged. No new config keys.
 - New state field `expiryHintMutedUntil: Record<string, string>` (ISO), with
   the usual state-migration default `{}`.
@@ -107,7 +121,9 @@ sessions onto the expiring account is desirable.
   msLeft ≤ 0 and NaN resetEpoch.
 - `expiringUnused` (statusline.test.ts): session gauge no longer flags;
   weekly still does at the new horizon.
-- Launcher (launcher.test.ts, mocked `askYesNo`): accept routes to hint
+- Launcher (launcher.test.ts, mocked `askYesNo` — note it is currently
+  module-private in launcher.ts; export it or route it through `Deps` to
+  make it mockable): accept routes to hint
   account via existing machinery; decline proceeds with pick and writes
   mute; non-TTY prints without prompting; mute suppresses print; explicit
   `ccx run` path untouched.
