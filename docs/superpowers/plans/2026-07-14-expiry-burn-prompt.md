@@ -19,7 +19,7 @@
 ### Task 0: Worktree setup
 
 - [ ] **Step 0.1:** `git -C ~/claude-projects/ccx worktree add ~/.dev-worktrees/ccx-expiry-hint -b feat/expiry-hint main` — then work exclusively in `~/.dev-worktrees/ccx-expiry-hint`.
-- [ ] **Step 0.2:** `cd ~/.dev-worktrees/ccx-expiry-hint && bun test` — Expected: all pass (108+ tests). Baseline green.
+- [ ] **Step 0.2:** `cd ~/.dev-worktrees/ccx-expiry-hint && bun test` — Expected: all pass (163 tests). Baseline green.
 
 ### Task 1: State field + config default
 
@@ -95,7 +95,7 @@ export function expiringUnused(gauge: Gauge, cfg: Config, now: Date): boolean {
 }
 ```
 
-Delete the old `expiringUnused` from `src/statusline.ts` and add `expiringUnused` to its existing `import { isStale } from './picker'`. In `src/status.ts` change the `expiringUnused` import from `'./statusline'` to `'./picker'` (keep `fmtEta` from statusline).
+Delete the old `expiringUnused` from `src/statusline.ts` and add `expiringUnused` to its existing `import { isStale } from './picker'`. In `src/status.ts` change the `expiringUnused` import from `'./statusline'` to `'./picker'` (keep `fmtEta` from statusline). In `tests/statusline.test.ts:2` the `expiringUnused` import also moves from `'../src/statusline'` to `'../src/picker'` (it's used around line 176) — without this the test file fails at load time.
 - [ ] **Step 2.4:** `bun test` — Expected: picker tests PASS. Any statusline.test.ts tests asserting 🔥 on session gauges now express dead behavior — move their weekly equivalents if missing and update session-gauge expectations to no-🔥 (spec: intended, not a regression; same for `ccx status`).
 - [ ] **Step 2.5:** `git add -A && git commit -m "feat: expiringUnused → picker.ts, weekly gauges only"`
 
@@ -305,13 +305,15 @@ Wire into `runLaunch` — replace `const pick = spilloverPick(...)` (launcher.ts
 ```
 
 Everything downstream (swap-or-pin at :76-90, messages at :97-101) works unchanged, including `prepareRun` failure falling back with the existing stderr notice.
+Deliberate omissions from the spec's test list: "mute suppresses non-TTY print" is covered transitively (the print path goes through `expiryHint`, whose mute behavior is tested in Task 3), and "explicit `ccx run` path untouched" holds by construction (`resolveExpiryHint` is wired only into `runLaunch`).
+
 - [ ] **Step 4.4:** `bun test` — Expected: PASS (full suite).
 - [ ] **Step 4.5:** `git add -A && git commit -m "feat: use-it-or-lose-it Y/n launch prompt"`
 
 ### Task 5: Ship
 
 - [ ] **Step 5.1:** `bun test` in the worktree — Expected: full suite green.
-- [ ] **Step 5.2:** Bump `package.json` version 1.0.0 → 1.1.0; add a README feature bullet (one line, under features: launch prompt to burn expiring weekly quota; declining mutes until the window resets). Commit `chore: v1.1.0`.
+- [ ] **Step 5.2:** Bump `package.json` version 0.1.0 → 0.2.0; add a README feature bullet (one line, under features: launch prompt to burn expiring weekly quota; declining mutes until the window resets). Commit `chore: v0.2.0`.
 - [ ] **Step 5.3:** Merge: `git -C ~/claude-projects/ccx merge --ff-only feat/expiry-hint` — atomic; the live statusline picks it up on next render. Then `bun test` once in the main checkout.
 - [ ] **Step 5.4:** `git -C ~/claude-projects/ccx worktree remove ~/.dev-worktrees/ccx-expiry-hint && git -C ~/claude-projects/ccx branch -d feat/expiry-hint && git -C ~/claude-projects/ccx push`
 - [ ] **Step 5.5:** Live smoke: `ccx status` renders without error; if an account currently has expiring weekly quota, `cc` shows the prompt (report what appeared either way).
