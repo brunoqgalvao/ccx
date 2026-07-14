@@ -37,6 +37,7 @@ export interface State {
   syncPending: boolean;
   accounts: Record<string, AccountState>;
   notifier: NotifierState;
+  expiryHintMutedUntil: Record<string, string>;  // account → gauge resetsAt ISO; declined hints stay muted until the window itself resets
 }
 
 export interface Config {
@@ -52,7 +53,7 @@ export interface Config {
   claudeCodeUaVersion: string;     // "2.1.199"
   skipPermissions: boolean;        // true — append --dangerously-skip-permissions to every claude spawn
   runMinTokenTtlMin: number;       // 360 — `ccx run`/`ccx refresh` refresh a vault token with less than this many minutes left
-  expiryNudgeMin: number;          // 60 — flag a gauge resetting within this many minutes while unused headroom remains
+  expiryNudgeMin: number;          // 180 — flag a WEEKLY gauge resetting within this many minutes while unused headroom remains
   statuslineEta: 'line2' | 'inline' | 'off'; // where reset countdowns render: dedicated second line (default), inline per gauge, or hidden
   statuslineBasic: boolean;        // true — render model · ctx% · effort from the session's own stdin before the accounts segment
   warmModel: string;               // 'haiku' — model for `ccx warm`'s window-starting ping (cheap, never touches the Fable pool)

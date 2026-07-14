@@ -41,4 +41,11 @@ describe('state persistence', () => {
     writeFileSync(join(dir, 'config.json'), 'nope');
     expect(loadConfig().warningPct).toBe(75);
   });
+  test('loadState defaults expiryHintMutedUntil for pre-existing state files', () => {
+    writeFileSync(join(dir, 'state.json'), JSON.stringify({ activeAccount: null, syncPending: false, accounts: {}, notifier: { lastSeverity: {}, lastNotified: {}, lastNotifiedSeverity: {} } }));
+    expect(loadState().expiryHintMutedUntil).toEqual({});
+  });
+  test('expiryNudgeMin default is 180', () => {
+    expect(loadConfig().expiryNudgeMin).toBe(180);
+  });
 });

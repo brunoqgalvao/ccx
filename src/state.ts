@@ -15,7 +15,7 @@ export const DEFAULT_CONFIG: Config = {
   claudeCodeUaVersion: '2.1.199',
   skipPermissions: true,
   runMinTokenTtlMin: 360,
-  expiryNudgeMin: 60,
+  expiryNudgeMin: 180,
   statuslineEta: 'line2',
   statuslineBasic: true,
   warmModel: 'haiku',
@@ -33,6 +33,7 @@ export function emptyState(): State {
   return {
     activeAccount: null, syncPending: false, accounts: {},
     notifier: { lastSeverity: {}, lastNotified: {}, lastNotifiedSeverity: {} },
+    expiryHintMutedUntil: {},
   };
 }
 
