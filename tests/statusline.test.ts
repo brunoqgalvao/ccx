@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { buildBasicSegment, buildEtaLine, buildSegment, composeFirstLine, expiringUnused, fmtEta, resolveStatuslineAccount } from '../src/statusline';
+import { expiringUnused } from '../src/picker';
+import { buildBasicSegment, buildEtaLine, buildSegment, composeFirstLine, fmtEta, resolveStatuslineAccount } from '../src/statusline';
 import type { Gauge } from '../src/types';
 import { fakeDeps } from './fakes';
 
@@ -141,9 +142,21 @@ describe('fmtEta', () => {
 });
 
 describe('use-it-or-lose-it nudge', () => {
-  test('gauge resetting soon with big unused headroom gets the burn marker', () => {
+  test('weekly gauge resetting soon with big unused headroom gets the burn marker', () => {
     const d = fakeDeps();
-    const soon = new Date(NOW.getTime() + 40 * 60_000).toISOString(); // 40m out, inside 60m nudge window
+    const soon = new Date(NOW.getTime() + 40 * 60_000).toISOString(); // 40m out, well inside the 180m nudge window
+    d.state.accounts.a = {
+      accountUuid: 'u', email: 'e',
+      snapshot: { fetchedAt: NOW.toISOString(), source: 'poll', gauges: [
+        { kind: 'weekly_all', percent: 8, severity: 'normal', resetsAt: soon, scopeModel: null, isActive: false },
+      ] },
+    };
+    d.cfg.statuslineEta = 'inline';
+    expect(buildSegment(d.state, d.cfg, NOW)).toBe('a wk8%·40m🔥');
+  });
+  test('session gauges never get the burn marker, even resetting soon with unused quota', () => {
+    const d = fakeDeps();
+    const soon = new Date(NOW.getTime() + 40 * 60_000).toISOString();
     d.state.accounts.a = {
       accountUuid: 'u', email: 'e',
       snapshot: { fetchedAt: NOW.toISOString(), source: 'poll', gauges: [
@@ -151,7 +164,7 @@ describe('use-it-or-lose-it nudge', () => {
       ] },
     };
     d.cfg.statuslineEta = 'inline';
-    expect(buildSegment(d.state, d.cfg, NOW)).toBe('a 5h8%·40m🔥');
+    expect(buildSegment(d.state, d.cfg, NOW)).toBe('a 5h8%·40m');
   });
   test('no marker when nearly used up or reset is far', () => {
     const d = fakeDeps();

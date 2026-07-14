@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { bindingGauge, effectiveHeadroom, gaugeApplies, generalHeadroom, isStale, pickAccount, spilloverPick } from '../src/picker';
+import { bindingGauge, effectiveHeadroom, expiringUnused, gaugeApplies, generalHeadroom, isStale, pickAccount, spilloverPick } from '../src/picker';
 import { DEFAULT_CONFIG } from '../src/state';
 import type { Gauge, Snapshot } from '../src/types';
 
@@ -142,5 +142,24 @@ describe('spilloverPick', () => {
   test('no active account falls back to plain pick', () => {
     const c = cands({ a: { snapshot: snap([g('session', 10)]) } });
     expect(spilloverPick(c, null, undefined, cfg, NOW).name).toBe('a');
+  });
+});
+
+describe('expiringUnused', () => {
+  test('weekly gauge within horizon with enough unused flags', () => {
+    expect(expiringUnused(g('weekly_all', 60, { resetsAt: '2026-07-03T20:00:00Z' }), DEFAULT_CONFIG, NOW)).toBe(true);
+  });
+  test('session gauges never flag, even in-horizon with unused quota', () => {
+    expect(expiringUnused(g('session', 10, { resetsAt: '2026-07-03T19:00:00Z' }), DEFAULT_CONFIG, NOW)).toBe(false);
+  });
+  test('beyond horizon does not flag', () => {
+    expect(expiringUnused(g('weekly_all', 60, { resetsAt: '2026-07-03T22:00:00Z' }), DEFAULT_CONFIG, NOW)).toBe(false);
+  });
+  test('too little unused does not flag', () => {
+    expect(expiringUnused(g('weekly_all', 80, { resetsAt: '2026-07-03T20:00:00Z' }), DEFAULT_CONFIG, NOW)).toBe(false);
+  });
+  test('past reset or unstarted window does not flag', () => {
+    expect(expiringUnused(g('weekly_all', 10, { resetsAt: '2026-07-03T17:00:00Z' }), DEFAULT_CONFIG, NOW)).toBe(false);
+    expect(expiringUnused(g('weekly_all', 10, { resetsAt: null }), DEFAULT_CONFIG, NOW)).toBe(false);
   });
 });

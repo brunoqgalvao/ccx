@@ -2,7 +2,7 @@ import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Deps } from './deps';
 import { checkAndNotify } from './notifier';
-import { isStale } from './picker';
+import { expiringUnused, isStale } from './picker';
 import { mergeStatusline, parseStatusline, resetEpoch } from './snapshots';
 import { pollAccount } from './usage';
 import type { Config, Gauge, State } from './types';
@@ -25,12 +25,6 @@ export function fmtEta(msLeft: number): string {
   if (h < 24) return `${h}h${m % 60 ? `${m % 60}m` : ''}`;
   const dDays = Math.floor(h / 24);
   return `${dDays}d${h % 24 ? `${h % 24}h` : ''}`;
-}
-
-/** Quota is use-it-or-lose-it: flag a gauge whose reset is imminent while plenty is unused. */
-export function expiringUnused(gauge: Gauge, cfg: Config, now: Date): boolean {
-  const msLeft = resetEpoch(gauge) - now.getTime();
-  return msLeft > 0 && msLeft <= cfg.expiryNudgeMin * 60_000 && 100 - gauge.percent >= cfg.expiryNudgeUnusedPct;
 }
 
 const CTX_WARN_PCT = 80;

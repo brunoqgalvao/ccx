@@ -1,3 +1,4 @@
+import { resetEpoch } from './snapshots';
 import type { Config, Gauge, Snapshot } from './types';
 
 export interface Candidate {
@@ -68,6 +69,15 @@ export function spilloverPick(cands: Candidate[], active: string | null, model: 
   if (cool.length === 0) return pickAccount(cands, model, cfg, now);
   const pick = pickAccount(cool, model, cfg, now);
   return { ...pick, reason: `spillover — ${active} at ${Math.round(activeUsage)}%; ${pick.reason}` };
+}
+
+/** Weekly quota is use-it-or-lose-it: flag a WEEKLY gauge whose reset is imminent
+ *  while plenty is unused. Session gauges never qualify — at the 180min horizon a
+ *  5h window spends 60% of its life "expiring", and 5h quota recycles ~34×/week. */
+export function expiringUnused(gauge: Gauge, cfg: Config, now: Date): boolean {
+  if (gauge.kind === 'session') return false;
+  const msLeft = resetEpoch(gauge) - now.getTime();
+  return msLeft > 0 && msLeft <= cfg.expiryNudgeMin * 60_000 && 100 - gauge.percent >= cfg.expiryNudgeUnusedPct;
 }
 
 export function pickAccount(cands: Candidate[], model: string | undefined, cfg: Config, now: Date): PickResult {

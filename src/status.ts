@@ -1,8 +1,8 @@
 import type { Deps } from './deps';
 import { checkAndNotify } from './notifier';
-import { isStale } from './picker';
+import { expiringUnused, isStale } from './picker';
 import { resetEpoch } from './snapshots';
-import { expiringUnused, fmtEta } from './statusline';
+import { fmtEta } from './statusline';
 import { refreshAllSnapshots } from './usage';
 
 export async function runStatus(d: Deps, args: string[]): Promise<number> {
