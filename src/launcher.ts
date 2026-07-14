@@ -91,7 +91,7 @@ export async function resolveExpiryHint(
   const text = fmtExpiryHint(hint, d.now());
   const interactive = isTTY && !claudeArgs.includes('-p') && !claudeArgs.includes('--print');
   if (!interactive) {
-    console.error(`ccx: 🔥 ${text} — grab it: ccx run ${hint.name}`);
+    console.error(`ccx: 🔥 ${text} — grab it: \`ccx run ${hint.name}\``);
     return pickedName;
   }
   console.error(`ccx: 🔥 ${text}`);
@@ -111,7 +111,7 @@ export async function runLaunch(d: Deps, claudeArgs: string[]): Promise<number> 
     await refreshAllSnapshots(d);
     let pick = spilloverPick(candidates(d.state), d.state.activeAccount, model, d.cfg, d.now());
     const redirect = await resolveExpiryHint(d, pick.name, model, claudeArgs, process.stdin.isTTY === true);
-    if (redirect !== pick.name) pick = { ...pick, name: redirect, reason: 'use it or lose it — expiring weekly quota accepted' };
+    if (redirect !== pick.name) pick = { ...pick, name: redirect, reason: 'expiring weekly quota — use it or lose it' };
     if (pick.name !== d.state.activeAccount) {
       if (await otherClaudeRunning()) {
         // the running session reads the live Keychain slot — never swap under it;

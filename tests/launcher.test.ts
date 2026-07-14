@@ -95,4 +95,9 @@ describe('fmtExpiryHint', () => {
     const hint = { name: 'm', gauge: { kind: 'weekly_scoped' as const, percent: 60, severity: 'normal' as const, resetsAt: '2026-07-03T20:00:00Z', scopeModel: 'Fable', isActive: false } };
     expect(fmtExpiryHint(hint, new Date('2026-07-03T18:00:00Z'))).toBe('m has 40% of Fable quota expiring in 2h (use it or lose it)');
   });
+
+  test('weekly_all gauges render the plain weekly label', () => {
+    const hint = { name: 'm', gauge: { kind: 'weekly_all' as const, percent: 60, severity: 'normal' as const, resetsAt: '2026-07-03T20:00:00Z', scopeModel: null, isActive: false } };
+    expect(fmtExpiryHint(hint, new Date('2026-07-03T18:00:00Z'))).toBe('m has 40% of weekly quota expiring in 2h (use it or lose it)');
+  });
 });
