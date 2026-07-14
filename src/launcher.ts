@@ -3,9 +3,11 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { Deps } from './deps';
 import { assessFailover } from './failover';
-import type { Candidate } from './picker';
-import { spilloverPick } from './picker';
+import type { Candidate, ExpiryHint } from './picker';
+import { expiryHint, spilloverPick } from './picker';
 import { prepareRun, runRun } from './run';
+import { resetEpoch } from './snapshots';
+import { fmtEta } from './statusline';
 import { pollAccount, refreshAllSnapshots } from './usage';
 import { activate, syncBack } from './vault';
 import type { Config, State } from './types';
@@ -59,11 +61,46 @@ async function otherClaudeRunning(): Promise<boolean> {
   return out.trim().length > 0;
 }
 
-async function askYesNo(question: string): Promise<boolean> {
+export async function askYesNo(question: string): Promise<boolean> {
   if (!process.stdin.isTTY) return false;
   process.stderr.write(`${question} [Y/n] `); // stdout may be redirected; the prompt must stay visible
   for await (const line of console) return !/^n/i.test(line.trim());
   return false;
+}
+
+export function fmtExpiryHint(hint: ExpiryHint, now: Date): string {
+  const label = hint.gauge.scopeModel ?? 'weekly';
+  const eta = fmtEta(resetEpoch(hint.gauge) - now.getTime());
+  return `${hint.name} has ${Math.round(100 - hint.gauge.percent)}% of ${label} quota expiring in ${eta} (use it or lose it)`;
+}
+
+/** Advisory only — scoring is untouched; the user redirects with Enter or declines
+ *  (mute until that window resets). Returns the account the launch should use.
+ *  The TTY branch MUST be decided here: askYesNo's silent non-TTY `false` would
+ *  otherwise register as a decline and write a mute (spec scenario 13). */
+export async function resolveExpiryHint(
+  d: Deps,
+  pickedName: string,
+  model: string | undefined,
+  claudeArgs: string[],
+  isTTY: boolean,
+  ask: (q: string) => Promise<boolean> = askYesNo,
+): Promise<string> {
+  const hint = expiryHint(candidates(d.state), pickedName, model, d.state.expiryHintMutedUntil, d.cfg, d.now());
+  if (!hint) return pickedName;
+  const text = fmtExpiryHint(hint, d.now());
+  const interactive = isTTY && !claudeArgs.includes('-p') && !claudeArgs.includes('--print');
+  if (!interactive) {
+    console.error(`ccx: 🔥 ${text} — grab it: ccx run ${hint.name}`);
+    return pickedName;
+  }
+  console.error(`ccx: 🔥 ${text}`);
+  if (await ask('ccx: launch there instead?')) return hint.name;
+  if (hint.gauge.resetsAt) {
+    d.state.expiryHintMutedUntil[hint.name] = hint.gauge.resetsAt;
+    d.saveState(d.state);
+  }
+  return pickedName;
 }
 
 export async function runLaunch(d: Deps, claudeArgs: string[]): Promise<number> {
@@ -72,7 +109,9 @@ export async function runLaunch(d: Deps, claudeArgs: string[]): Promise<number> 
   if (Object.keys(d.state.accounts).length >= 2) {
     await syncBack(d); // attribute live-slot gauges correctly even after an out-of-band `claude /login`
     await refreshAllSnapshots(d);
-    const pick = spilloverPick(candidates(d.state), d.state.activeAccount, model, d.cfg, d.now());
+    let pick = spilloverPick(candidates(d.state), d.state.activeAccount, model, d.cfg, d.now());
+    const redirect = await resolveExpiryHint(d, pick.name, model, claudeArgs, process.stdin.isTTY === true);
+    if (redirect !== pick.name) pick = { ...pick, name: redirect, reason: 'use it or lose it — expiring weekly quota accepted' };
     if (pick.name !== d.state.activeAccount) {
       if (await otherClaudeRunning()) {
         // the running session reads the live Keychain slot — never swap under it;
