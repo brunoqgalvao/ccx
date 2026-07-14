@@ -33,7 +33,7 @@ model-scoped weekly), and:
 - 🔁 **swap & resume** — hit a limit mid-session? One `[Y/n]` and the same
   conversation continues on the other account (`claude --continue`, cache-aware:
   if the limit resets in minutes, it tells you to wait instead)
-- ⏳ **use it or lose it** — launch prompt offers a `[Y/n]` redirect to an
+- 🔥 **use it or lose it** — launch prompt offers a `[Y/n]` redirect to an
   account with unused weekly quota expiring within 3h; declining mutes that
   account until its window resets
 - 📌 **`ccx run work`** — pin a terminal to an account. Different terminals,
