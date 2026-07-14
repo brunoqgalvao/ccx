@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { bindingGauge, effectiveHeadroom, expiringUnused, gaugeApplies, generalHeadroom, isStale, pickAccount, spilloverPick } from '../src/picker';
+import { bindingGauge, effectiveHeadroom, expiringUnused, expiryHint, gaugeApplies, generalHeadroom, isStale, pickAccount, spilloverPick } from '../src/picker';
 import { DEFAULT_CONFIG } from '../src/state';
 import type { Gauge, Snapshot } from '../src/types';
 
 const NOW = new Date('2026-07-03T18:00:00Z');
 const FRESH = NOW.toISOString();
+const IN2H = '2026-07-03T20:00:00Z';
+const IN1H = '2026-07-03T19:00:00Z';
 
 function g(kind: Gauge['kind'], percent: number, over: Partial<Gauge> = {}): Gauge {
   return { kind, percent, severity: 'normal', resetsAt: '2026-07-04T18:00:00Z', scopeModel: null, isActive: false, ...over };
@@ -161,5 +163,52 @@ describe('expiringUnused', () => {
   test('past reset or unstarted window does not flag', () => {
     expect(expiringUnused(g('weekly_all', 10, { resetsAt: '2026-07-03T17:00:00Z' }), DEFAULT_CONFIG, NOW)).toBe(false);
     expect(expiringUnused(g('weekly_all', 10, { resetsAt: null }), DEFAULT_CONFIG, NOW)).toBe(false);
+  });
+  test('inclusive edges: exactly 180m out with exactly 25 unused still flags', () => {
+    expect(expiringUnused(g('weekly_all', 75, { resetsAt: '2026-07-03T21:00:00Z' }), DEFAULT_CONFIG, NOW)).toBe(true);
+  });
+});
+
+describe('expiryHint', () => {
+  const NONE: Record<string, string> = {};
+  const fresh = { name: 'fresh', snapshot: snap([g('session', 5), g('weekly_all', 0)]) };
+  const expiring = (name: string, resetsAt = IN2H, pct = 60) =>
+    ({ name, snapshot: snap([g('session', 10), g('weekly_all', 10), g('weekly_scoped', pct, { scopeModel: 'Fable', resetsAt })]) });
+
+  test('fires for a non-picked account with expiring unused weekly quota', () => {
+    const h = expiryHint([fresh, expiring('m')], 'fresh', 'claude-fable-5[1m]', NONE, DEFAULT_CONFIG, NOW);
+    expect(h).toEqual({ name: 'm', gauge: expect.objectContaining({ kind: 'weekly_scoped' }) });
+  });
+  test('silent when the picked account is the expiring one', () => {
+    expect(expiryHint([fresh, expiring('m')], 'm', 'claude-fable-5[1m]', NONE, DEFAULT_CONFIG, NOW)).toBeNull();
+  });
+  test('silent when the picked account ALSO has expiring unused quota (no churn)', () => {
+    expect(expiryHint([expiring('a'), expiring('b', IN1H)], 'a', 'claude-fable-5[1m]', NONE, DEFAULT_CONFIG, NOW)).toBeNull();
+  });
+  test('scoped gauge does not hint a non-matching model', () => {
+    expect(expiryHint([fresh, expiring('m')], 'fresh', 'claude-opus-4-8', NONE, DEFAULT_CONFIG, NOW)).toBeNull();
+  });
+  test('unknown model hints conservatively', () => {
+    expect(expiryHint([fresh, expiring('m')], 'fresh', undefined, NONE, DEFAULT_CONFIG, NOW)?.name).toBe('m');
+  });
+  test('usability floor: an account with any applicable gauge ≥ criticalPct is not suggested', () => {
+    const walled = { name: 'w', snapshot: snap([g('session', 95), g('weekly_scoped', 60, { scopeModel: 'Fable', resetsAt: IN2H })]) };
+    expect(expiryHint([fresh, walled], 'fresh', 'claude-fable-5[1m]', NONE, DEFAULT_CONFIG, NOW)).toBeNull();
+  });
+  test('soonest reset wins among multiple qualifying accounts', () => {
+    expect(expiryHint([fresh, expiring('late'), expiring('soon', IN1H)], 'fresh', undefined, NONE, DEFAULT_CONFIG, NOW)?.name).toBe('soon');
+  });
+  test('copy gauge is the qualifying one with most unused points', () => {
+    const two = { name: 'm', snapshot: snap([g('weekly_all', 70, { resetsAt: IN2H }), g('weekly_scoped', 40, { scopeModel: 'Fable', resetsAt: IN2H })]) };
+    expect(expiryHint([fresh, two], 'fresh', 'claude-fable-5[1m]', NONE, DEFAULT_CONFIG, NOW)?.gauge.percent).toBe(40);
+  });
+  test('mute suppresses until the window resets, then expires; falls to next account', () => {
+    const muted = { m: IN2H };
+    expect(expiryHint([fresh, expiring('m')], 'fresh', undefined, muted, DEFAULT_CONFIG, NOW)).toBeNull();
+    expect(expiryHint([fresh, expiring('m')], 'fresh', undefined, { m: '2026-07-03T17:00:00Z' }, DEFAULT_CONFIG, NOW)?.name).toBe('m');
+    expect(expiryHint([fresh, expiring('m', IN1H), expiring('n')], 'fresh', undefined, { m: IN1H }, DEFAULT_CONFIG, NOW)?.name).toBe('n');
+  });
+  test('needsLogin and snapshot-less accounts are skipped', () => {
+    expect(expiryHint([fresh, { ...expiring('m'), needsLogin: true }, { name: 'x' }], 'fresh', undefined, NONE, DEFAULT_CONFIG, NOW)).toBeNull();
   });
 });

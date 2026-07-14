@@ -80,6 +80,36 @@ export function expiringUnused(gauge: Gauge, cfg: Config, now: Date): boolean {
   return msLeft > 0 && msLeft <= cfg.expiryNudgeMin * 60_000 && 100 - gauge.percent >= cfg.expiryNudgeUnusedPct;
 }
 
+export interface ExpiryHint { name: string; gauge: Gauge; }
+
+/** Advisory launch hint: a non-picked account whose applicable WEEKLY gauge resets
+ *  soon with meaningful unused headroom. Never fires when the picked account is
+ *  itself burning expiring quota, for muted accounts (declined earlier this window),
+ *  or for accounts already at the critical wall (mirrors assessFailover's minUsable). */
+export function expiryHint(
+  cands: Candidate[],
+  pickedName: string,
+  model: string | undefined,
+  mutedUntil: Record<string, string>,
+  cfg: Config,
+  now: Date,
+): ExpiryHint | null {
+  const expiring = (s: Snapshot): Gauge[] =>
+    s.gauges.filter((gauge) => gaugeApplies(gauge, model) && expiringUnused(gauge, cfg, now));
+  const picked = cands.find((c) => c.name === pickedName);
+  if (picked?.snapshot && expiring(picked.snapshot).length > 0) return null;
+  const qualifying = cands
+    .filter((c) => c.name !== pickedName && !c.needsLogin && c.snapshot)
+    .filter((c) => !(mutedUntil[c.name] && now.getTime() < Date.parse(mutedUntil[c.name])))
+    .filter((c) => effectiveHeadroom(c.snapshot!, model) > 100 - cfg.criticalPct)
+    .map((c) => ({ name: c.name, gauges: expiring(c.snapshot!) }))
+    .filter((q) => q.gauges.length > 0)
+    .sort((a, b) => Math.min(...a.gauges.map(resetEpoch)) - Math.min(...b.gauges.map(resetEpoch)));
+  if (qualifying.length === 0) return null;
+  const { name, gauges } = qualifying[0];
+  return { name, gauge: [...gauges].sort((a, b) => a.percent - b.percent)[0] };
+}
+
 export function pickAccount(cands: Candidate[], model: string | undefined, cfg: Config, now: Date): PickResult {
   if (cands.length === 0) throw new Error('pickAccount requires at least one candidate account');
   const usable = cands.filter((c) => !c.needsLogin);
