@@ -151,3 +151,20 @@ describe('refreshAllSnapshots', () => {
     expect(api.calls).toContain('usage:at-w');
   });
 });
+
+describe('poll history capture', () => {
+  test('successful poll appends a history record for that account', async () => {
+    const { d } = await twoAccountDeps();
+    d.api = fakeApi({ usage: okUsage });
+    await pollAccount(d, 'work');
+    expect(d.history).toHaveLength(1);
+    expect(d.history[0].account).toBe('work');
+    expect(d.history[0].gauges).toHaveLength(3);
+  });
+  test('failed poll appends nothing', async () => {
+    const { d } = await twoAccountDeps();
+    d.api = fakeApi({ usage: () => ({ ok: false as const, status: 500 }) });
+    await pollAccount(d, 'work');
+    expect(d.history).toHaveLength(0);
+  });
+});

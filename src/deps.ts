@@ -1,11 +1,12 @@
 import type { Api } from './api';
 import type { Keychain } from './keychain';
-import type { Config, State } from './types';
+import type { Config, Gauge, State } from './types';
 
 export interface Deps {
   cfg: Config;
   state: State;
   saveState: (s: State) => void;
+  appendHistory: (account: string, gauges: Gauge[], now: Date) => void;
   kc: Keychain;
   api: Api;
   now: () => Date;

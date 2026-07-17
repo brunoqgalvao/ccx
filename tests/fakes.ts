@@ -1,6 +1,8 @@
 import type { Api, ProfileResult, RefreshResult, UsageResult } from '../src/api';
 import type { Keychain } from '../src/keychain';
 import type { Deps } from '../src/deps';
+import type { HistoryRecord } from '../src/history';
+import type { Gauge } from '../src/types';
 import { DEFAULT_CONFIG } from '../src/state';
 import { emptyState } from '../src/state';
 
@@ -69,12 +71,17 @@ export function failingWriteKeychain(
   };
 }
 
-export function fakeDeps(over: Partial<Deps> = {}): Deps & { notifications: string[] } {
+export function fakeDeps(over: Partial<Deps> = {}): Deps & { notifications: string[]; history: HistoryRecord[] } {
   const notifications: string[] = [];
+  const history: HistoryRecord[] = [];
   const d = {
     cfg: { ...DEFAULT_CONFIG },
     state: emptyState(),
     saveState: () => {},
+    appendHistory: (account: string, gauges: Gauge[], now: Date) => {
+      history.push({ ts: now.toISOString(), account, gauges });
+    },
+    history,
     kc: fakeKeychain(),
     api: fakeApi(),
     now: () => new Date('2026-07-03T18:00:00Z'),

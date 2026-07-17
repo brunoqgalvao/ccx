@@ -1,11 +1,13 @@
 #!/usr/bin/env bun
 import { realApi } from './api';
 import type { Deps } from './deps';
+import { appendHistory } from './history';
 import { realKeychain } from './keychain';
 import { runLaunch, runSwap } from './launcher';
 import { osascriptNotify } from './notifier';
 import { loadConfig, loadState, saveState } from './state';
 import { runRefresh, runRun, runWarm } from './run';
+import { runStats } from './stats';
 import { runStatus } from './status';
 import { runStatusline } from './statusline';
 import { runDoctor } from './doctor';
@@ -17,6 +19,7 @@ function makeDeps(): Deps {
     cfg,
     state: loadState(),
     saveState,
+    appendHistory,
     kc: realKeychain(),
     api: realApi(cfg),
     now: () => new Date(),
@@ -29,6 +32,7 @@ const HELP = `ccx — multi-account orchestrator for Claude Code
 Usage:
   ccx [claude args...]      pick best account, launch claude
   ccx status [--json]       both accounts: gauges, resets, active marker
+  ccx stats [--since 7d] [--account <name>]  historic usage: now/avg/peak + daily sparkline
   ccx run <account> [args]  pinned session via CLAUDE_CODE_OAUTH_TOKEN (live slot untouched)
   ccx refresh               refresh parked vault tokens nearing expiry (launchd/cron-friendly)
   ccx warm                  start idle 5h windows with a tiny ping so resets land sooner
@@ -70,6 +74,7 @@ async function main(): Promise<number> {
 async function dispatch(d: Deps, argv: string[]): Promise<number> {
   switch (argv[0]) {
     case 'status': return runStatus(d, argv.slice(1));
+    case 'stats': return runStats(d, argv.slice(1));
     case 'run': return runRun(d, argv.slice(1));
     case 'refresh': return runRefresh(d);
     case 'warm': return runWarm(d);

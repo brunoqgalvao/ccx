@@ -61,6 +61,7 @@ export async function pollAccount(d: Deps, name: string, opts: { force?: boolean
         model: account.snapshot?.model,
         gauges: result.gauges,
       };
+      d.appendHistory(name, result.gauges, d.now());
     }
     d.saveState(d.state);
   } catch {
