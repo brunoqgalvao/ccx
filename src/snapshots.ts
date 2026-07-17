@@ -49,6 +49,30 @@ export function parseStatusline(body: unknown, cfg: Config): { model?: string; g
   return { model: typeof model === 'string' ? model : undefined, gauges };
 }
 
+// weekly anchors jitter sub-second across API responses; distinct accounts differ by hours
+const ANCHOR_TOLERANCE_MS = 60_000;
+
+/** Does this statusline input plausibly belong to the snapshot's account? A session
+ *  whose env-token pin broke (or that outlived a swap) is served ANOTHER account's
+ *  rate limits while still labeled with its original CCX_ACCOUNT — merging those
+ *  gauges would file account B's usage under account A. The weekly reset anchor is
+ *  the per-account fingerprint: compare stdin's weekly anchor against a trusted one —
+ *  the scoped gauge (poll-only, survives merges; F resets with wk) or a poll-sourced
+ *  weekly. No trusted anchor or no stdin weekly → accept (fresh accounts, old inputs). */
+export function anchorsCompatible(
+  prev: Snapshot | undefined,
+  parsed: { gauges: Gauge[] },
+): boolean {
+  if (!prev) return true;
+  const stdinWk = parsed.gauges.find((g) => g.kind === 'weekly_all' && g.resetsAt !== null);
+  if (!stdinWk) return true;
+  const trusted =
+    prev.gauges.find((g) => g.kind === 'weekly_scoped' && g.resetsAt !== null) ??
+    (prev.source === 'poll' ? prev.gauges.find((g) => g.kind === 'weekly_all' && g.resetsAt !== null) : undefined);
+  if (!trusted) return true;
+  return Math.abs(resetEpoch(stdinWk) - resetEpoch(trusted)) <= ANCHOR_TOLERANCE_MS;
+}
+
 export function mergeStatusline(
   prev: Snapshot | undefined,
   parsed: { model?: string; gauges: Gauge[] },

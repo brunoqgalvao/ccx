@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import type { Deps } from './deps';
 import { checkAndNotify } from './notifier';
 import { expiringUnused, isStale } from './picker';
-import { mergeStatusline, parseStatusline, resetEpoch } from './snapshots';
+import { anchorsCompatible, mergeStatusline, parseStatusline, resetEpoch } from './snapshots';
 import { pollAccount } from './usage';
 import type { Config, Gauge, State } from './types';
 
@@ -74,11 +74,12 @@ export function composeFirstLine(passthrough: string, basic: string, accounts: s
   return [passthrough, tail].filter((s) => s !== '').join(' ');
 }
 
-export function buildSegment(state: State, cfg: Config, now: Date, pinnedAccount?: string): string {
+export function buildSegment(state: State, cfg: Config, now: Date, pinnedAccount?: string, pinBroken = false): string {
   const parts = Object.entries(state.accounts).map(([name, account]) => {
     // ⚡ = live Keychain slot; 📌 = the account THIS session is pinned to (ccx run) —
     // without it, a pinned session's statusline points the reader at the wrong account.
-    const marker = `${state.activeAccount === name ? '⚡' : ''}${pinnedAccount === name ? '📌' : ''}`;
+    // 📌⚠ = the pin label no longer matches the account the session actually consumes.
+    const marker = `${state.activeAccount === name ? '⚡' : ''}${pinnedAccount === name ? `📌${pinBroken ? '⚠' : ''}` : ''}`;
     if (account.needsLogin) return `${marker}${name} ⚠login`;
     if (!account.snapshot || account.snapshot.gauges.length === 0) return `${marker}${name} —`;
     const gauges = [...account.snapshot.gauges]
@@ -167,23 +168,32 @@ export async function runStatusline(d: Deps): Promise<void> {
   const envAccount = process.env.CCX_ACCOUNT;
   const pinnedAccount = envAccount && d.state.accounts[envAccount] ? envAccount : undefined;
   const sessionAccount = resolveStatuslineAccount(d.state, envAccount);
+  let merged = false;
+  let pinBroken = false;
   if (input) {
     try {
       const owner = sessionAccount ? d.state.accounts[sessionAccount] : undefined;
       if (owner) {
         const parsed = parseStatusline(input, d.cfg);
         if (parsed.gauges.length > 0) {
-          owner.snapshot = mergeStatusline(owner.snapshot, parsed, d.now());
+          // a session whose pin broke (or that outlived a swap) is consuming a DIFFERENT
+          // account than its label — merging would corrupt the owner's snapshot
+          if (anchorsCompatible(owner.snapshot, parsed)) {
+            owner.snapshot = mergeStatusline(owner.snapshot, parsed, d.now());
+            merged = true;
+          } else {
+            pinBroken = sessionAccount === pinnedAccount;
+          }
         }
         d.saveState(d.state);
       }
       // other accounts: sparse, BOUNDED polling — abandoned work is safe because
       // pollAccount pins lastPoll before any network call (no herd, no re-spam).
-      // Skip the session's own account (statusline-fed), not the active slot: for a
-      // pinned session they differ, and its own account's data is already fresh here.
+      // Skip the session's own account only when the merge actually fed it — a
+      // rejected merge means the owner needs poll data like everyone else.
       const pollPhase = (async () => {
         for (const name of Object.keys(d.state.accounts)) {
-          if (name !== sessionAccount) await pollAccount(d, name);
+          if (name !== sessionAccount || !merged) await pollAccount(d, name);
         }
       })();
       pollPhase.catch(() => {}); // an abandoned phase's late rejection must never kill the render
@@ -196,7 +206,7 @@ export async function runStatusline(d: Deps): Promise<void> {
 
   const rendered = await runPassthrough(d.cfg.statuslinePassthrough, raw);
   const basic = buildBasicSegment(input, d.cfg);
-  const segment = buildSegment(d.state, d.cfg, d.now(), pinnedAccount);
+  const segment = buildSegment(d.state, d.cfg, d.now(), pinnedAccount, pinBroken);
   console.log(composeFirstLine(rendered, basic, segment));
   const etaLine = buildEtaLine(d.state, d.cfg, d.now());
   if (etaLine) console.log(etaLine);

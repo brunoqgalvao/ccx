@@ -261,3 +261,21 @@ describe('resolveStatuslineAccount', () => {
     expect(resolveStatuslineAccount(state({ activeAccount: null }), undefined)).toBeUndefined();
   });
 });
+
+describe('broken pin marker', () => {
+  test('pinBroken renders 📌⚠ on the pinned account', () => {
+    const d = fakeDeps();
+    d.state.activeAccount = 'personal';
+    d.state.accounts.personal = {
+      accountUuid: 'u1', email: 'e1',
+      snapshot: { fetchedAt: NOW.toISOString(), source: 'statusline', gauges: [g('session', 23)] },
+    };
+    d.state.accounts.work = {
+      accountUuid: 'u2', email: 'e2',
+      snapshot: { fetchedAt: NOW.toISOString(), source: 'poll', gauges: [g('session', 4)] },
+    };
+    d.cfg.statuslineEta = 'inline';
+    expect(buildSegment(d.state, d.cfg, NOW, 'work', true)).toBe('⚡personal 5h23%·1d │ 📌⚠work 5h4%·1d');
+    expect(buildSegment(d.state, d.cfg, NOW, 'work', false)).toBe('⚡personal 5h23%·1d │ 📌work 5h4%·1d');
+  });
+});
