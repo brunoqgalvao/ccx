@@ -33,7 +33,9 @@ Usage:
   ccx [claude args...]      pick best account, launch claude
   ccx status [--json]       both accounts: gauges, resets, active marker
   ccx stats [--since 7d] [--account <name>]  historic usage: now/avg/peak + daily sparkline
-  ccx run <account> [args]  pinned session via CLAUDE_CODE_OAUTH_TOKEN (live slot untouched)
+  ccx run <account> [args]  swap the live slot to <account> and launch claude (keychain auth)
+  ccx run <account> --pin   old behavior: pin via CLAUDE_CODE_OAUTH_TOKEN (live slot untouched,
+                            but interactive sessions can't use subscription-gated models)
   ccx refresh               refresh parked vault tokens nearing expiry (launchd/cron-friendly)
   ccx warm                  start idle 5h windows with a tiny ping so resets land sooner
   ccx swap [name] [-c]      switch live account (-c: resume with claude --continue)

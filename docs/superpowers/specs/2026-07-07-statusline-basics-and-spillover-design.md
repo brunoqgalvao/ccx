@@ -51,3 +51,16 @@ post-exit `offerFailover` flow — same as `ccx run` today.
 - Picker/launch: active < 75 stays; active ≥ 75 with idle alternative swaps;
   spillover pins when another claude runs; all ≥ 75 falls back; needsLogin
   and missing-snapshot alternatives are skipped.
+
+## Amendment (2026-07-20, v0.4.0): pinned spillover retired
+
+Rule 2's "another claude running → pinned via `CLAUDE_CODE_OAUTH_TOKEN`" branch
+is removed. Discovery: env-token sessions carry no subscription metadata (the
+keychain blob's `subscriptionType` never reaches the client), so the interactive
+UI gates subscription models — Fable shows "needs extra usage credits" even on
+Max 20x. Spillover now ALWAYS swaps the live slot via `activate`, printing a
+heads-up when another claude session shares it (that session may adopt the new
+account's tokens on its next refresh; post-exit `syncBack` re-attributes rotated
+pairs by refresh-token hash). `ccx run <name>` follows the same keychain-first
+path; the env-token launch survives as opt-in `ccx run <name> --pin` and for
+`ccx warm` pings (print-mode calls are not affected by the UI gate).

@@ -78,15 +78,49 @@ describe('prepareRun', () => {
   });
 });
 
-describe('runRun', () => {
-  test('spawns claude with the pinned token and skip-permissions applied', async () => {
+describe('runRun (keychain-first default)', () => {
+  const noPin = async () => { throw new Error('pinned spawn must not be used without --pin'); };
+
+  test('swaps the live slot to the account and spawns claude WITHOUT an env token', async () => {
+    const kc = fakeKeychain({ [vaultService('bqg')]: blob('at-bqg', 'rt-bqg', FRESH) });
+    const api = fakeApi({ profile: () => ({ ok: true, uuid: 'uuid-bqg', email: 'bqg@x.com' }) });
+    const d = depsWith({ kc, api });
+    const spawned: { args: string[]; account?: string }[] = [];
+    const code = await runRun(d, ['bqg', '-p', 'hi'], noPin, () => false,
+      async (args, account) => { spawned.push({ args, account }); return 0; }, async () => false);
+    expect(code).toBe(0);
+    expect(spawned).toEqual([{ args: ['-p', 'hi', '--dangerously-skip-permissions'], account: 'bqg' }]);
+    expect(kc.store.get(LIVE_SERVICE)).toContain('at-bqg'); // live slot swapped
+    expect(d.state.activeAccount).toBe('bqg');
+  });
+
+  test('proceeds (with a warning) even when another claude session is running', async () => {
+    const kc = fakeKeychain({ [vaultService('bqg')]: blob('at-bqg', 'rt-bqg', FRESH) });
+    const api = fakeApi({ profile: () => ({ ok: true, uuid: 'uuid-bqg', email: 'bqg@x.com' }) });
+    const d = depsWith({ kc, api });
+    const spawned: string[][] = [];
+    const code = await runRun(d, ['bqg'], noPin, () => true,
+      async (args) => { spawned.push(args); return 0; }, async () => true);
+    expect(code).toBe(0);
+    expect(spawned.length).toBe(1);
+  });
+
+  test('no vault entry → activate fails, nothing spawns, exit 1', async () => {
+    const d = depsWith(); // empty keychain
+    const code = await runRun(d, ['bqg'], noPin, () => false,
+      async () => { throw new Error('must not spawn'); }, async () => false);
+    expect(code).toBe(1);
+  });
+
+  test('--pin spawns claude with the pinned token and skip-permissions applied', async () => {
     const kc = fakeKeychain({ [vaultService('bqg')]: blob('at-bqg', 'rt-bqg', FRESH) });
     const api = fakeApi({ profile: () => ({ ok: true, uuid: 'uuid-bqg', email: 'bqg@x.com' }) });
     const d = depsWith({ kc, api });
     const spawned: { args: string[]; token: string }[] = [];
-    const code = await runRun(d, ['bqg', '-p', 'hi'], async (args, token) => { spawned.push({ args, token }); return 0; });
+    const code = await runRun(d, ['bqg', '--pin', '-p', 'hi'], async (args, token) => { spawned.push({ args, token }); return 0; });
     expect(code).toBe(0);
     expect(spawned).toEqual([{ args: ['-p', 'hi', '--dangerously-skip-permissions'], token: 'at-bqg' }]);
+    expect(kc.store.get(LIVE_SERVICE)).toBeUndefined(); // live slot untouched
   });
 
   test('missing account name is a usage error', async () => {
@@ -143,7 +177,7 @@ describe('runRun auto-resume', () => {
     });
     const d = depsWith({ kc, api, now: () => new Date(clock) });
     const spawned: { args: string[]; token: string }[] = [];
-    const code = await runRun(d, ['bqg'], async (args, token) => {
+    const code = await runRun(d, ['bqg', '--pin'], async (args, token) => {
       spawned.push({ args, token });
       if (spawned.length === 1) { clock += 8 * 3600_000; return 1; } // session outlives token → auth death
       return 0; // resumed session exits normally while token still valid

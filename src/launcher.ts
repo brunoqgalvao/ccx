@@ -5,7 +5,6 @@ import type { Deps } from './deps';
 import { assessFailover } from './failover';
 import type { Candidate, ExpiryHint } from './picker';
 import { expiryHint, spilloverPick } from './picker';
-import { prepareRun, runRun } from './run';
 import { resetEpoch } from './snapshots';
 import { fmtEta } from './statusline';
 import { pollAccount, refreshAllSnapshots } from './usage';
@@ -54,7 +53,7 @@ export async function spawnClaude(args: string[], account?: string): Promise<num
   return await p.exited;
 }
 
-async function otherClaudeRunning(): Promise<boolean> {
+export async function otherClaudeRunning(): Promise<boolean> {
   const p = Bun.spawn(['pgrep', '-x', 'claude'], { stdout: 'pipe', stderr: 'ignore' });
   const out = await new Response(p.stdout).text();
   await p.exited;
@@ -113,19 +112,16 @@ export async function runLaunch(d: Deps, claudeArgs: string[]): Promise<number> 
     const redirect = await resolveExpiryHint(d, pick.name, model, claudeArgs, process.stdin.isTTY === true);
     if (redirect !== pick.name) pick = { ...pick, name: redirect, reason: 'expiring weekly quota — use it or lose it' };
     if (pick.name !== d.state.activeAccount) {
+      // Keychain swap even under a running session: env-token pinning is worse — it
+      // strips the blob's subscription metadata, so the interactive UI gates
+      // subscription models ("needs extra usage credits"). The residual risk is the
+      // running session picking up the new account's tokens on its next refresh;
+      // syncBack re-attributes rotated pairs by refresh-token hash afterwards.
       if (await otherClaudeRunning()) {
-        // the running session reads the live Keychain slot — never swap under it;
-        // pin the new session via env token instead (ccx run mechanics)
-        const prep = await prepareRun(d, pick.name);
-        if (prep.ok) {
-          console.error(`ccx: ${pick.reason}`);
-          return await runRun(d, [pick.name, ...claudeArgs]);
-        }
-        console.error(`ccx: spillover to ${pick.name} unavailable (${prep.reason}) — staying on ${d.state.activeAccount}`);
-      } else {
-        const r = await activate(d, pick.name);
-        if (!r.ok) console.error(`ccx: ${r.reason}; launching on ${d.state.activeAccount}`);
+        console.error(`ccx: heads-up — another claude session shares the live slot; it may pick up ${pick.name}'s tokens on its next refresh`);
       }
+      const r = await activate(d, pick.name);
+      if (!r.ok) console.error(`ccx: ${r.reason}; launching on ${d.state.activeAccount}`);
     }
     const active = d.state.activeAccount ? d.state.accounts[d.state.activeAccount] : undefined;
     for (const gauge of active?.snapshot?.gauges ?? []) {

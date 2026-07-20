@@ -2,9 +2,9 @@ import { parseTokens } from './creds';
 import type { Deps } from './deps';
 import type { AccountState } from './types';
 import { vaultService } from './keychain';
-import { withPermissionFlag } from './launcher';
+import { otherClaudeRunning, spawnClaude, withPermissionFlag } from './launcher';
 import { refreshAllSnapshots } from './usage';
-import { refreshParked, syncBack } from './vault';
+import { activate, refreshParked, syncBack } from './vault';
 
 export type RunPrep = { ok: true; token: string; expiresAt: number; warnings: string[] } | { ok: false; reason: string };
 
@@ -69,15 +69,54 @@ export function shouldResume(exitedAt: Date, tokenExpiresAt: number, args: strin
   return exitedAt.getTime() >= tokenExpiresAt;
 }
 
+/** Keychain-first launch: swap the live slot to `name` and spawn claude WITHOUT an env
+ *  token. CLAUDE_CODE_OAUTH_TOKEN carries no subscription metadata (the keychain blob
+ *  does), so env-token interactive sessions gate subscription models behind "needs
+ *  extra usage credits" — keychain auth is the only path where Fable-class models work. */
+export async function runLiveSession(
+  d: Deps,
+  name: string,
+  args: string[],
+  spawn: (args: string[], account?: string) => Promise<number> = spawnClaude,
+  claudeRunning: () => Promise<boolean> = otherClaudeRunning,
+): Promise<number> {
+  if (!d.state.accounts[name]) {
+    const known = Object.keys(d.state.accounts).join(', ') || '(none imported)';
+    console.error(`ccx: unknown account "${name}" — imported: ${known}`);
+    return 1;
+  }
+  if (name !== d.state.activeAccount && (await claudeRunning())) {
+    console.error(`ccx: heads-up — another claude session shares the live slot; it may pick up ${name}'s tokens on its next refresh`);
+  }
+  const r = await activate(d, name);
+  if (!r.ok) {
+    console.error(`ccx: ${r.reason} — \`ccx run ${name} --pin\` launches via env token without touching the live slot`);
+    return 1;
+  }
+  console.error(`ccx: live session on ${name} (${d.state.accounts[name].email}) — keychain auth, subscription models available`);
+  const code = await spawn(withPermissionFlag(args, d.cfg), name);
+  // claude rotates tokens in the live slot during the session — capture them or the
+  // vault copy (and refreshTokenHash) goes stale
+  const sync = await syncBack(d);
+  if (!sync.ok) console.error(`ccx: ${sync.reason}`);
+  return code;
+}
+
 export async function runRun(
   d: Deps,
   argv: string[],
   spawn = spawnClaudePinned,
   isTTY: () => boolean = () => process.stdin.isTTY === true,
+  liveSpawn: (args: string[], account?: string) => Promise<number> = spawnClaude,
+  claudeRunning: () => Promise<boolean> = otherClaudeRunning,
 ): Promise<number> {
   const name = argv[0];
-  if (!name || name.startsWith('-')) { console.error('usage: ccx run <account> [claude args...]'); return 1; }
-  let args = argv.slice(1);
+  if (!name || name.startsWith('-')) { console.error('usage: ccx run <account> [--pin] [claude args...]'); return 1; }
+  const rest = argv.slice(1);
+  // Env-token pinning is opt-in: it never touches the live slot (parallel terminals on
+  // different accounts) but its sessions can't use subscription-gated models interactively.
+  if (!rest.includes('--pin')) return runLiveSession(d, name, rest, liveSpawn, claudeRunning);
+  let args = rest.filter((a) => a !== '--pin');
   let resumed = false;
   while (true) {
     const prep = await prepareRun(d, name);

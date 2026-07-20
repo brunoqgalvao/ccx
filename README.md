@@ -27,18 +27,19 @@ Keychain, watches all three rate-limit gauges per account (5h session, weekly,
 model-scoped weekly), and:
 
 - 🚀 **`ccx`** — sticks with the active account while it's under 75% used,
-  spills new sessions to a cooler account once it isn't (pinned via env token
-  if another session is already running — the Keychain slot is never swapped
-  under a live session), and tells you why
+  spills new sessions to a cooler account once it isn't (always via Keychain
+  swap, so subscription models keep working; a heads-up is printed when
+  another session shares the live slot), and tells you why
 - 🔁 **swap & resume** — hit a limit mid-session? One `[Y/n]` and the same
   conversation continues on the other account (`claude --continue`, cache-aware:
   if the limit resets in minutes, it tells you to wait instead)
 - 🔥 **use it or lose it** — launch prompt offers a `[Y/n]` redirect to an
   account with unused weekly quota expiring within 3h; declining mutes that
   account until its window resets
-- 📌 **`ccx run work`** — pin a terminal to an account. Different terminals,
-  different accounts, simultaneously; sessions that outlive their token
-  refresh and resume themselves
+- 📌 **`ccx run work`** — launch a session on a chosen account (Keychain
+  swap, subscription-aware). Add `--pin` for the legacy env-token mode:
+  different terminals, different accounts simultaneously, self-resuming —
+  but subscription-gated models don't work interactively there
 - 📊 **statusline** — every account's gauges + time-to-reset, live inside
   Claude Code, with a 🔥 nudge when quota is about to reset unused:
 
@@ -100,10 +101,11 @@ separate "account names" config entry.
 
 | Command | Description |
 |---|---|
-| `ccx [claude args...]` | Default command. Sticky spillover pick: the active account keeps winning while its binding gauge (for the target model) is under `warningPct`; at `warningPct`+ the session goes to the best account still under the threshold (everyone hot → plain max headroom). A different pick activates via Keychain swap — unless another `claude` is already running, in which case the new session launches **pinned** via env token (`ccx run` mechanics) and the live slot is untouched. On exit: sync-back + failover assessment (Keychain-launched sessions only). |
+| `ccx [claude args...]` | Default command. Sticky spillover pick: the active account keeps winning while its binding gauge (for the target model) is under `warningPct`; at `warningPct`+ the session goes to the best account still under the threshold (everyone hot → plain max headroom). A different pick **always** activates via Keychain swap — even when another `claude` is running (a heads-up is printed: that session may pick up the new account's tokens on its next refresh). Env-token pinning is never used here: pinned interactive sessions can't use subscription-gated models (see `--pin`). On exit: sync-back + failover assessment. |
 | `ccx status [--json]` | Refreshes both accounts' snapshots and prints gauges, severities, reset times, and the active marker. |
 | `ccx stats [--since 7d\|30d\|YYYY-MM-DD] [--account <name>]` | Historic usage from `~/.ccx/history/YYYY-MM.jsonl` (one JSONL record per account per successful poll, UTC-month files): per account × gauge, now/avg/peak percent plus a daily-peak sparkline for weekly gauges. Reads offline — never polls. Old months are pruned with `rm`. |
-| `ccx run <account> [claude args...]` | **Pinned session.** Launches `claude` with `CLAUDE_CODE_OAUTH_TOKEN` set to `<account>`'s vault token — the live Keychain slot is never touched, so multiple terminals can run different accounts simultaneously. Refreshes the vault token first if it has under `runMinTokenTtlMin` left, and verifies the token's identity before launching (an unverifiable token is refused, because claude silently falls back to the Keychain account otherwise). Pinned sessions bypass the picker, sync-back, and failover offer. |
+| `ccx run <account> [claude args...]` | **Keychain session on a chosen account.** Swaps the live Keychain slot to `<account>` (via `activate`, with all its token-loss guards) and launches plain `claude` — full subscription-aware auth, so Fable-class models work interactively. Warns (but proceeds) when another `claude` session is running. Syncs rotated tokens back to the vault on exit. Bypasses the picker. |
+| `ccx run <account> --pin [claude args...]` | **Pinned session (legacy).** Launches `claude` with `CLAUDE_CODE_OAUTH_TOKEN` set to `<account>`'s vault token — the live Keychain slot is never touched, so multiple terminals can run different accounts simultaneously. Caveat: the env token carries no subscription metadata, so the interactive UI gates subscription models behind "needs extra usage credits" (print-mode `-p` calls are unaffected). Refreshes the vault token first if it has under `runMinTokenTtlMin` left, and verifies the token's identity before launching (an unverifiable token is refused, because claude silently falls back to the Keychain account otherwise). Pinned sessions bypass the picker, sync-back, and failover offer. |
 | `ccx refresh` | Refreshes every parked vault token that has under `runMinTokenTtlMin` left (the live account is skipped — Claude Code manages that one). Exit 0 when nothing failed; built for a launchd/cron timer. |
 | `ccx warm` | Starts any idle 5h window with a tiny silent ping (`warmModel`, default haiku). The 5h window anchors at your *first* request — warming means the next reset lands sooner during real work, and an unused window costs nothing. Run it from a launchd timer (~15 min). |
 | `ccx swap [name] [-c]` | Switches the live Keychain slot (defaults to "the other account" when two are imported). `-c`/`--continue` resumes with `claude --continue` after swapping. Refuses if another `claude` process is running unless `--force` is also passed. |
@@ -151,9 +153,15 @@ but ccx no longer knows your account names. Recovery is manual: `ccx import
 account needs a `claude` → `/login` → `ccx import <other> --force` round
 trip. There is no automatic Keychain-enumeration rebuild in the MVP.
 
-## Pinned sessions (`ccx run`) and proactive token refresh
+## Pinned sessions (`ccx run --pin`) and proactive token refresh
 
-`ccx run <account>` sidesteps the single-live-slot model entirely: the session's
+> **v0.4.0:** plain `ccx run <account>` now swaps the live Keychain slot and
+> launches without an env token — `CLAUDE_CODE_OAUTH_TOKEN` carries no
+> subscription metadata, so pinned *interactive* sessions gate subscription
+> models (Fable) behind "needs extra usage credits". Everything below applies
+> to the opt-in `--pin` mode.
+
+`ccx run <account> --pin` sidesteps the single-live-slot model entirely: the session's
 account is baked in at launch via `CLAUDE_CODE_OAUTH_TOKEN` and never reads the
 Keychain again. Every ccx-launched session (pinned or not) also carries
 `CCX_ACCOUNT` in its env, so `ccx statusline` attributes that session's gauges
